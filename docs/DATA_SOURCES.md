@@ -1,31 +1,47 @@
-# DATA_SOURCES.md — Matriz de Fontes (o gargalo real)
+# DATA_SOURCES.md — Matriz de Fontes (Portão 1)
 
-> Este é o documento de maior alavancagem do projeto. Preencher na Fase 2, de preferência com
-> pesquisa do Gemini CLI. Cada dado precisa de fonte primária, alternativa, custo e licença.
-> Regra: dado sem fonte confiável → `N/D — REQUER VERIFICAÇÃO`, nunca inventado.
+> Absorvido de `skill/morning-call/references/data-sources.md` + matriz do Portão 1.
+> Dado sem fonte → `N/D — REQUER VERIFICAÇÃO`. Chaves em `.dev.vars` / secrets.
 
-## Matriz (preencher)
+## Implementado em código (`src/data`)
 
-| Dado                         | Fonte primária             | Alternativa      | Frequência | Atraso     | Custo       | Licença   | Confiabilidade |
-| ---------------------------- | -------------------------- | ---------------- | ---------- | ---------- | ----------- | --------- | -------------- |
-| Selic / DI                   | BCB SGS                    | B3               | diária     | —          | grátis      | pública   | alta           |
-| Focus                        | BCB (Expectativas)         | —                | semanal    | —          | grátis      | pública   | alta           |
-| PTAX / USD/BRL               | BCB PTAX                   | provedor mercado | diária     | fim de dia | grátis      | pública   | alta           |
-| Ibovespa / ações             | B3                         | provedor mercado | intraday   | 15min*     | varia       | verificar | média          |
-| Curva DI intraday            | B3/ANBIMA                  | provedor         | intraday   | varia      | pago?       | verificar | verificar      |
-| Tesouro / NTN-B              | Tesouro Direto / ANBIMA    | —                | diária     | —          | grátis      | pública   | alta           |
-| Treasuries US                | U.S. Treasury / FRED       | —                | diária     | —          | grátis      | pública   | alta           |
-| S&P/Nasdaq/VIX               | provedor mercado           | —                | intraday   | varia      | varia       | verificar | verificar      |
-| Commodities (Brent/WTI/ouro) | CME / provedor             | —                | intraday   | varia      | varia       | verificar | verificar      |
-| Vol implícita                | provedor derivativos       | —                | intraday   | varia      | **pago**    | verificar | verificar      |
-| Spreads crédito secundário   | ANBIMA / provedor          | —                | diária     | varia      | **pago?**   | verificar | verificar      |
-| Fluxo estrangeiro            | B3                         | —                | D+1/D+2    | atraso     | grátis/pago | verificar | média          |
-| Notícias                     | Reuters/Bloomberg/FT/Valor | Perplexity       | contínua   | —          | pago        | verificar | alta           |
+| Dado | Provider | Key secret | Custo | Notas |
+|---|---|---|---|---|
+| USD/BRL, Selic, CDI, IPCA 12m | `bcb/sgs.ts` | não | grátis | SGS códigos em `keys.ts` |
+| Focus IPCA/Selic/Câmbio | `bcb/focus.ts` | não | grátis | baseline consenso |
+| UST 2/10/30, VIX, DXY proxy, Brent, WTI | `fred.ts` | `FRED_API_KEY` | grátis | sem key → ND |
+| UST 2/10/30 | `ustreasury.ts` | não | grátis | XML; merge prefere OK |
 
-\* Confirmar delays reais e termos de uso de cada fonte antes de depender dela.
+## Endpoints (verificados no skill, jul/2026)
 
-## Itens que provavelmente NÃO existem de graça com qualidade institucional
+### BCB SGS
+```
+https://api.bcb.gov.br/dados/serie/bcdata.sgs.{CODIGO}/dados/ultimos/{N}?formato=json
+```
+Códigos: `1` USD/BRL · `11` Selic diária · `12` CDI · `432` Meta Selic · `13522` IPCA 12m.
 
-Vol implícita completa, curva intraday, spreads de crédito secundário, opções completas, fluxo
-estrangeiro em tempo real, consenso em tempo real. Decidir por cada um: pagar, aproximar com
-proxy datado, ou marcar `N/D` no relatório. **Não fabricar.**
+### Focus Olinda
+```
+https://olinda.bcb.gov.br/olinda/servico/Expectativas/versao/v1/odata/ExpectativasMercadoAnuais?$format=json&$top=50&$orderby=Data%20desc
+```
+
+### FRED
+```
+https://api.stlouisfed.org/fred/series/observations?series_id={ID}&api_key={KEY}&file_type=json
+```
+Séries: DGS2, DGS10, DGS30, VIXCLS, DTWEXBGS, DCOILBRENTEU, DCOILWTICO.
+
+### U.S. Treasury XML
+```
+https://home.treasury.gov/resource-center/data-chart-center/interest-rates/pages/xml?data=daily_treasury_yield_curve&field_tdr_date_value={AAAA}
+```
+
+## Não no Portão 1 (pago / licença)
+
+Vol implícita, curva DI intraday, spreads secundários ANBIMA, fluxo B3 realtime, notícias Reuters/BBG.
+Decisão: pagar só se Portão 1 provar valor no público ou provar que o gap é o gargalo.
+
+## Política as_of
+
+- Venue em todo DataPoint (`BR` | `US` | `EU` | `ASIA` | `GLOBAL_24H`)
+- Retorno 1D cruzando venues sem `allowCrossVenue` → erro em `quant/metrics.ts`

@@ -15,9 +15,12 @@ condicionais, rastreáveis e disciplinadas por risco**.
 | Arquivo                     | O que é                                                  |
 | --------------------------- | -------------------------------------------------------- |
 | `CLAUDE.md`                 | Instruções globais / constituição para agentes de código |
+| `PLANO_DEFINITIVO.md`       | Ordem de trabalho atual (Portão 1)                       |
+| `PLANO_ESTRATEGICO.md`      | Portões, kill, anti-alucinação                           |
+| `PLANO_EXECUCAO.md`         | T1–T8 instrumento de medida                              |
 | `docs/RUNTIME_AGENTS.md`    | Arquitetura de agentes de runtime (a árvore)             |
 | `ARCHITECTURE.md`           | Decisões de arquitetura e o porquê                       |
-| `IMPLEMENTATION_PLAN.md`    | Fases de implementação                                   |
+| `IMPLEMENTATION_PLAN.md`    | Fases legadas (supersedido em ordem pelo definitivo)     |
 | `MORNING_CALL_OTIMIZADO.md` | Contrato editorial do relatório (fonte da verdade)       |
 | `docs/DATA_SOURCES.md`      | Matriz de fontes de dados (o gargalo real)               |
 

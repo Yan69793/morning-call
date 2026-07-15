@@ -3,7 +3,7 @@
  * Sem JSON válido contra estes schemas, a etapa falha. Não improvisa.
  */
 import { z } from "zod";
-import { InstantUTC, Provenance, Rationale, Source } from "./common.js";
+import { InstantUTC, Provenance, Quantity, Rationale, Source } from "./common.js";
 import { ND_MARKER } from "./data.js";
 
 /** Um fato só é fato com fonte e horário. Sem isso é hipótese, e vai para outra seção do §18. */
@@ -14,8 +14,23 @@ export const Fact = z.object({
 });
 export type Fact = z.infer<typeof Fact>;
 
+/**
+ * Afirmação quantitativa estruturada, não prosa. É o que torna o cross-check numérico
+ * (PLANO_ESTRATEGICO §4, mecanismos 3 e 4) implementável: `snapshot_key` liga o número a uma chave
+ * do snapshot gravado em D1 e `valor_citado` é o que o modelo declarou. Um validador em código
+ * (src/committee/crossCheck) compara os dois. Sem isto, "zero alucinação" é promessa, não mecanismo.
+ */
+export const QuantClaim = z.object({
+  snapshot_key: z.string().min(1),
+  valor_citado: Quantity,
+  contexto: z.string().optional(),
+});
+export type QuantClaim = z.infer<typeof QuantClaim>;
+
 export const ResearchOutput = z.object({
   facts: z.array(Fact),
+  /** Afirmações numéricas conferidas contra o snapshot pelo cross-check. Vazio é válido. */
+  quant_claims: z.array(QuantClaim).default([]),
   market_consensus: z.array(z.string()),
   possible_mispricings: z.array(z.string()),
   uncertainties: z.array(z.string()),
