@@ -1,0 +1,671 @@
+{
+  "$comment": "GERADO por apps/morning-call/scripts/gen-trade-card-schema.ts a partir de src/schemas/trade.ts. Não editar à mão: rode `npm run gen:schema -w @sz/morning-call`. A versão manual anterior divergiu do AD-6 (trazia entrada como number) e ninguém percebeu.",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "nome": {
+      "type": "string",
+      "minLength": 1
+    },
+    "classe": {
+      "type": "string",
+      "minLength": 1
+    },
+    "categoria": {
+      "type": "string",
+      "enum": [
+        "direcional",
+        "valor_relativo",
+        "carry",
+        "convexidade",
+        "hedge",
+        "arbitragem_narrativa",
+        "evento",
+        "assimetria_cauda"
+      ]
+    },
+    "horizonte": {
+      "type": "string",
+      "enum": [
+        "intraday",
+        "swing",
+        "tatico_1_3m",
+        "estrategico_6_12m"
+      ]
+    },
+    "direcao": {
+      "type": "string",
+      "enum": [
+        "comprar",
+        "vender"
+      ]
+    },
+    "entrada": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "tipo": {
+              "type": "string",
+              "const": "preco"
+            },
+            "instrumento": {
+              "type": "string",
+              "minLength": 1
+            },
+            "nivel": {
+              "type": "object",
+              "properties": {
+                "value": {
+                  "type": "number"
+                },
+                "unit": {
+                  "type": "string",
+                  "enum": [
+                    "BRL",
+                    "USD",
+                    "BRL_por_USD",
+                    "pct",
+                    "bps",
+                    "index_points",
+                    "ratio",
+                    "contratos"
+                  ]
+                }
+              },
+              "required": [
+                "value",
+                "unit"
+              ]
+            },
+            "faixa": {
+              "type": "object",
+              "properties": {
+                "min": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "type": "number"
+                    },
+                    "unit": {
+                      "type": "string",
+                      "enum": [
+                        "BRL",
+                        "USD",
+                        "BRL_por_USD",
+                        "pct",
+                        "bps",
+                        "index_points",
+                        "ratio",
+                        "contratos"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "unit"
+                  ]
+                },
+                "max": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "type": "number"
+                    },
+                    "unit": {
+                      "type": "string",
+                      "enum": [
+                        "BRL",
+                        "USD",
+                        "BRL_por_USD",
+                        "pct",
+                        "bps",
+                        "index_points",
+                        "ratio",
+                        "contratos"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "unit"
+                  ]
+                }
+              },
+              "required": [
+                "min",
+                "max"
+              ]
+            }
+          },
+          "required": [
+            "tipo",
+            "instrumento",
+            "nivel",
+            "faixa"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "tipo": {
+              "type": "string",
+              "const": "spread"
+            },
+            "nivel": {
+              "type": "object",
+              "properties": {
+                "value": {
+                  "type": "number"
+                },
+                "unit": {
+                  "type": "string",
+                  "enum": [
+                    "BRL",
+                    "USD",
+                    "BRL_por_USD",
+                    "pct",
+                    "bps",
+                    "index_points",
+                    "ratio",
+                    "contratos"
+                  ]
+                }
+              },
+              "required": [
+                "value",
+                "unit"
+              ]
+            },
+            "faixa": {
+              "type": "object",
+              "properties": {
+                "min": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "type": "number"
+                    },
+                    "unit": {
+                      "type": "string",
+                      "enum": [
+                        "BRL",
+                        "USD",
+                        "BRL_por_USD",
+                        "pct",
+                        "bps",
+                        "index_points",
+                        "ratio",
+                        "contratos"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "unit"
+                  ]
+                },
+                "max": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "type": "number"
+                    },
+                    "unit": {
+                      "type": "string",
+                      "enum": [
+                        "BRL",
+                        "USD",
+                        "BRL_por_USD",
+                        "pct",
+                        "bps",
+                        "index_points",
+                        "ratio",
+                        "contratos"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "unit"
+                  ]
+                }
+              },
+              "required": [
+                "min",
+                "max"
+              ]
+            },
+            "pernas": {
+              "minItems": 2,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "instrumento": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "lado": {
+                    "type": "string",
+                    "enum": [
+                      "long",
+                      "short"
+                    ]
+                  },
+                  "peso": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  }
+                },
+                "required": [
+                  "instrumento",
+                  "lado",
+                  "peso"
+                ]
+              }
+            }
+          },
+          "required": [
+            "tipo",
+            "nivel",
+            "faixa",
+            "pernas"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "tipo": {
+              "type": "string",
+              "const": "premio"
+            },
+            "nivel": {
+              "type": "object",
+              "properties": {
+                "value": {
+                  "type": "number"
+                },
+                "unit": {
+                  "type": "string",
+                  "enum": [
+                    "BRL",
+                    "USD",
+                    "BRL_por_USD",
+                    "pct",
+                    "bps",
+                    "index_points",
+                    "ratio",
+                    "contratos"
+                  ]
+                }
+              },
+              "required": [
+                "value",
+                "unit"
+              ]
+            },
+            "faixa": {
+              "type": "object",
+              "properties": {
+                "min": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "type": "number"
+                    },
+                    "unit": {
+                      "type": "string",
+                      "enum": [
+                        "BRL",
+                        "USD",
+                        "BRL_por_USD",
+                        "pct",
+                        "bps",
+                        "index_points",
+                        "ratio",
+                        "contratos"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "unit"
+                  ]
+                },
+                "max": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "type": "number"
+                    },
+                    "unit": {
+                      "type": "string",
+                      "enum": [
+                        "BRL",
+                        "USD",
+                        "BRL_por_USD",
+                        "pct",
+                        "bps",
+                        "index_points",
+                        "ratio",
+                        "contratos"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "unit"
+                  ]
+                }
+              },
+              "required": [
+                "min",
+                "max"
+              ]
+            },
+            "pernas": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "instrumento": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "lado": {
+                    "type": "string",
+                    "enum": [
+                      "long",
+                      "short"
+                    ]
+                  },
+                  "tipo": {
+                    "type": "string",
+                    "enum": [
+                      "call",
+                      "put"
+                    ]
+                  },
+                  "strike": {
+                    "type": "object",
+                    "properties": {
+                      "value": {
+                        "type": "number"
+                      },
+                      "unit": {
+                        "type": "string",
+                        "enum": [
+                          "BRL",
+                          "USD",
+                          "BRL_por_USD",
+                          "pct",
+                          "bps",
+                          "index_points",
+                          "ratio",
+                          "contratos"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "value",
+                      "unit"
+                    ]
+                  },
+                  "vencimento": {
+                    "type": "string",
+                    "format": "date",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                  },
+                  "peso": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  }
+                },
+                "required": [
+                  "instrumento",
+                  "lado",
+                  "tipo",
+                  "strike",
+                  "vencimento",
+                  "peso"
+                ]
+              }
+            }
+          },
+          "required": [
+            "tipo",
+            "nivel",
+            "faixa",
+            "pernas"
+          ]
+        }
+      ]
+    },
+    "alvo_1": {
+      "type": "object",
+      "properties": {
+        "value": {
+          "type": "number"
+        },
+        "unit": {
+          "type": "string",
+          "enum": [
+            "BRL",
+            "USD",
+            "BRL_por_USD",
+            "pct",
+            "bps",
+            "index_points",
+            "ratio",
+            "contratos"
+          ]
+        }
+      },
+      "required": [
+        "value",
+        "unit"
+      ]
+    },
+    "alvo_2": {
+      "type": "object",
+      "properties": {
+        "value": {
+          "type": "number"
+        },
+        "unit": {
+          "type": "string",
+          "enum": [
+            "BRL",
+            "USD",
+            "BRL_por_USD",
+            "pct",
+            "bps",
+            "index_points",
+            "ratio",
+            "contratos"
+          ]
+        }
+      },
+      "required": [
+        "value",
+        "unit"
+      ]
+    },
+    "invalidacao": {
+      "type": "object",
+      "properties": {
+        "descricao": {
+          "type": "string",
+          "minLength": 20
+        },
+        "nivel": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "value": {
+                  "type": "number"
+                },
+                "unit": {
+                  "type": "string",
+                  "enum": [
+                    "BRL",
+                    "USD",
+                    "BRL_por_USD",
+                    "pct",
+                    "bps",
+                    "index_points",
+                    "ratio",
+                    "contratos"
+                  ]
+                }
+              },
+              "required": [
+                "value",
+                "unit"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "descricao",
+        "nivel"
+      ]
+    },
+    "tese": {
+      "type": "string",
+      "minLength": 20
+    },
+    "erro_precificacao": {
+      "type": "string",
+      "minLength": 20
+    },
+    "catalisador": {
+      "type": "string",
+      "minLength": 20
+    },
+    "por_que_agora": {
+      "type": "string",
+      "minLength": 20
+    },
+    "por_que_nao_consensual": {
+      "type": "string",
+      "minLength": 20
+    },
+    "riscos_ocultos": {
+      "type": "string",
+      "minLength": 20
+    },
+    "plano_saida": {
+      "type": "string",
+      "minLength": 20
+    },
+    "estrutura_alternativa": {
+      "type": "string",
+      "minLength": 20
+    },
+    "correlacao_com_outras": {
+      "type": "string",
+      "minLength": 20
+    },
+    "retorno_potencial": {
+      "type": "object",
+      "properties": {
+        "value": {
+          "type": "number"
+        },
+        "unit": {
+          "type": "string",
+          "enum": [
+            "BRL",
+            "USD",
+            "BRL_por_USD",
+            "pct",
+            "bps",
+            "index_points",
+            "ratio",
+            "contratos"
+          ]
+        }
+      },
+      "required": [
+        "value",
+        "unit"
+      ]
+    },
+    "perda_maxima": {
+      "type": "object",
+      "properties": {
+        "value": {
+          "type": "number"
+        },
+        "unit": {
+          "type": "string",
+          "enum": [
+            "BRL",
+            "USD",
+            "BRL_por_USD",
+            "pct",
+            "bps",
+            "index_points",
+            "ratio",
+            "contratos"
+          ]
+        }
+      },
+      "required": [
+        "value",
+        "unit"
+      ]
+    },
+    "sizing_pct_orcamento_risco": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "maximum": 100
+    },
+    "conviccao": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 10
+    },
+    "fontes": {
+      "minItems": 1,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  },
+  "required": [
+    "nome",
+    "classe",
+    "categoria",
+    "horizonte",
+    "direcao",
+    "entrada",
+    "alvo_1",
+    "alvo_2",
+    "invalidacao",
+    "tese",
+    "erro_precificacao",
+    "catalisador",
+    "por_que_agora",
+    "por_que_nao_consensual",
+    "riscos_ocultos",
+    "plano_saida",
+    "estrutura_alternativa",
+    "correlacao_com_outras",
+    "retorno_potencial",
+    "perda_maxima",
+    "sizing_pct_orcamento_risco",
+    "conviccao",
+    "fontes"
+  ]
+}

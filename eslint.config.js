@@ -22,8 +22,9 @@ export default tseslint.config(
   {
     // No entry do Worker, `console.log` É o mecanismo de observabilidade: é o que sai no
     // `wrangler tail`. Tratar como desleixo aqui empurraria o log para `console.warn`, que
-    // sinalizaria problema onde há operação normal.
-    files: ["apps/morning-call/src/index.ts"],
+    // sinalizaria problema onde há operação normal. Mesma lógica para scripts de linha de
+    // comando, onde stdout é a interface com quem rodou.
+    files: ["apps/morning-call/src/index.ts", "apps/morning-call/scripts/**"],
     rules: { "no-console": "off" },
   },
   {

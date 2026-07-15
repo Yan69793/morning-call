@@ -1,0 +1,10 @@
+{
+  // Tooling de build roda em Node, não no workerd. Projeto à parte para que o tsconfig do Worker
+  // continue sem os tipos de Node: se `fs` e `path` fossem visíveis lá, um import por engano só
+  // apareceria como erro no deploy, não no typecheck.
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "include": ["."]
+}
