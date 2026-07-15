@@ -86,9 +86,7 @@ export async function finishRun(
   finishedAt: string,
 ): Promise<void> {
   await db
-    .prepare(
-      `UPDATE runs SET status = ?, finished_at = ?, faltantes = ? WHERE id = ?`,
-    )
+    .prepare(`UPDATE runs SET status = ?, finished_at = ?, faltantes = ? WHERE id = ?`)
     .bind(status, finishedAt, JSON.stringify(faltantes), runId)
     .run();
 }

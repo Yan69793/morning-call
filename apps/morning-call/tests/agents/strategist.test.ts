@@ -63,6 +63,7 @@ function validMockJson(claimSelic: number) {
         direcao: "comprar",
         entrada: {
           tipo: "preco",
+          instrumento: "USDBRL",
           nivel: { value: 5.07, unit: "BRL_por_USD" },
           faixa: {
             min: { value: 5.0, unit: "BRL_por_USD" },

@@ -14,14 +14,14 @@
 
 ## Estado
 
-| Peça | Status |
-|---|---|
-| Schemas + D1 + crossCheck + quant/core | OK |
-| metrics (PC-1 / Venue) | OK |
-| data/ snapshot (BCB/FRED/UST) | OK |
-| orchestrator steps + report/mark/scoreboard | OK |
-| multi-agente / 19 seções | adiado (Wave C, pós-kill) |
-| Paper-trade live + secrets + D1 real | operacional (humano) |
+| Peça                                        | Status                    |
+| ------------------------------------------- | ------------------------- |
+| Schemas + D1 + crossCheck + quant/core      | OK                        |
+| metrics (PC-1 / Venue)                      | OK                        |
+| data/ snapshot (BCB/FRED/UST)               | OK                        |
+| orchestrator steps + report/mark/scoreboard | OK                        |
+| multi-agente / 19 seções                    | adiado (Wave C, pós-kill) |
+| Paper-trade live + secrets + D1 real        | operacional (humano)      |
 
 ## Ordem
 

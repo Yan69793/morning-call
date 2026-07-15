@@ -1,5 +1,3 @@
 {
-    "recommendations": [
-        "codeflow-studio.claude-code-extension"
-    ]
+  "recommendations": ["codeflow-studio.claude-code-extension"]
 }

@@ -39,9 +39,9 @@ describe("buildMarketSnapshot", () => {
   it("valida MarketSnapshot com provider mock", async () => {
     const mock: DataProvider = {
       name: "mock",
-      async fetch() {
-        return [ok("SELIC_META", 15), nd("VIX")];
-      },
+      // `Promise.resolve` em vez de `async`: o mock não espera nada, e marcá-lo `async` só para
+      // casar com a assinatura esconde que ele é síncrono.
+      fetch: () => Promise.resolve([ok("SELIC_META", 15), nd("VIX")]),
     };
     const snap = await buildMarketSnapshot({
       runId: RUN,
@@ -56,9 +56,7 @@ describe("buildMarketSnapshot", () => {
   it("provider que falha vira ND se o provider devolver ND", async () => {
     const mock: DataProvider = {
       name: "fail",
-      async fetch() {
-        return [nd("USDBRL")];
-      },
+      fetch: () => Promise.resolve([nd("USDBRL")]),
     };
     const snap = await buildMarketSnapshot({
       runId: RUN,

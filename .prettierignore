@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.wrangler/
+coverage/
+package-lock.json
+
+# O Radar Quant chegou pronto e em produção, com convenção própria (sem ponto e vírgula, aspas
+# simples). Reformatar 98 arquivos criaria um diff gigante que esconde mudança real no histórico e
+# não conserta bug nenhum. Ele tem o próprio tooling; ver a mesma decisão no eslint.config.js.
+apps/radar-quant/

@@ -26,9 +26,7 @@ export function pickLatestMedian(
   if (filtered.length === 0) return null;
   filtered.sort((a, b) => (a.Data ?? "").localeCompare(b.Data ?? ""));
   const last = filtered[filtered.length - 1]!;
-  const asOf = last.Data
-    ? `${last.Data.slice(0, 10)}T18:00:00.000Z`
-    : "1970-01-01T00:00:00.000Z";
+  const asOf = last.Data ? `${last.Data.slice(0, 10)}T18:00:00.000Z` : "1970-01-01T00:00:00.000Z";
   return { value: last.Mediana as number, asOf };
 }
 
@@ -56,9 +54,7 @@ export const bcbFocusProvider: DataProvider = {
     try {
       const res = await fetchFn(url, { headers: { Accept: "application/json" } });
       if (!res.ok) {
-        return INDICATORS.map((i) =>
-          nd(i.key, `Focus HTTP ${res.status}`, ctx.observedAt),
-        );
+        return INDICATORS.map((i) => nd(i.key, `Focus HTTP ${res.status}`, ctx.observedAt));
       }
       const rows = parseFocusPayload(await res.json());
       return INDICATORS.map(({ indicador, key }) => {

@@ -98,7 +98,10 @@ describe("crossCheckClaims", () => {
   });
 
   it("com tolerância zero, exige citação exata e reprova o arredondamento", () => {
-    const r = crossCheckClaims([claim("USDBRL", 5.07, "BRL_por_USD")], idx, { relTol: 0, absTol: 0 });
+    const r = crossCheckClaims([claim("USDBRL", 5.07, "BRL_por_USD")], idx, {
+      relTol: 0,
+      absTol: 0,
+    });
     expect(r.ok).toBe(false);
     expect(r.violations[0]!.kind).toBe("valor_divergente");
   });

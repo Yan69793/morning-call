@@ -4,18 +4,13 @@
  */
 import { z } from "zod";
 import { chatCompletion } from "./openrouter.js";
-import {
-  Bias,
-  QuantClaim,
-  Regime,
-  type QuantClaim as QuantClaimT,
-} from "../schemas/agents.js";
+import { Bias, QuantClaim, Regime, type QuantClaim as QuantClaimT } from "../schemas/agents.js";
 import { TradeCardDraft, sealTradeCard, type TradeCard } from "../schemas/trade.js";
 import type { MarketSnapshot } from "../schemas/data.js";
 import type { Provenance } from "../schemas/common.js";
 import { Rationale } from "../schemas/common.js";
 
-export const PROMPT_VERSION = "strategist@2026-07-15";
+export const PROMPT_VERSION = "strategist@2026-07-16";
 
 export const StrategistRaw = z.object({
   abertura: z.object({
@@ -89,15 +84,16 @@ export function buildStrategistUserPrompt(snapshot: MarketSnapshot): string {
 
 export function parseStrategistContent(content: string): StrategistRaw {
   // remove fence se modelo embrulhar
-  const trimmed = content.trim().replace(/^```json\s*/i, "").replace(/```$/i, "").trim();
+  const trimmed = content
+    .trim()
+    .replace(/^```json\s*/i, "")
+    .replace(/```$/i, "")
+    .trim();
   const json = JSON.parse(trimmed) as unknown;
   return StrategistRaw.parse(json);
 }
 
-export function sealStrategistTrades(
-  raw: StrategistRaw,
-  provenance: Provenance,
-): TradeCard[] {
+export function sealStrategistTrades(raw: StrategistRaw, provenance: Provenance): TradeCard[] {
   return raw.trades.map((draft) => sealTradeCard(draft, crypto.randomUUID(), provenance));
 }
 

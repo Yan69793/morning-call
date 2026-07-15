@@ -7,13 +7,22 @@ import { todayTradeDateBrt } from "./data/calendar.js";
 
 export type { Env };
 
-function isMarkCron(cron: string): boolean {
-  // wrangler: "30 21 * * 1-5" = 18:30 BRT mark
-  return cron.includes("21") || cron.startsWith("30 21");
+/** Cron da marcação a mercado, 18:30 BRT. Precisa bater com `wrangler.toml`. */
+export const MARK_CRON = "30 21 * * 1-5";
+
+/**
+ * Qual job este disparo é.
+ *
+ * Era `cron.includes("21") || cron.startsWith("30 21")`, que acerta o cron de hoje por sorte:
+ * qualquer expressão com "21" em qualquer posição (minuto 21, dia 21, `21 9 * * *`) seria lida
+ * como marcação e o Morning Call do dia não sairia. Comparação exata não tem essa ambiguidade.
+ */
+export function isMarkCron(cron: string): boolean {
+  return cron.trim() === MARK_CRON;
 }
 
 export default {
-  async fetch(request: Request, _env: Env): Promise<Response> {
+  fetch(request: Request): Response {
     const url = new URL(request.url);
     if (url.pathname === "/" || url.pathname === "/health") {
       return Response.json({
@@ -25,10 +34,18 @@ export default {
     return new Response("not found", { status: 404 });
   },
 
-  async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+  scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext): void {
     if (isMarkCron(controller.cron)) {
-      // Mark job: implementação de preço live fica na Wave B+; loga no-op seguro
-      console.log(JSON.stringify({ event: "mark_cron", cron: controller.cron, note: "mark pipeline ready via report/mark.ts" }));
+      // Marcação a mercado depende de feed de preço, que ainda não existe (ver report/mark.ts:
+      // a função está pronta e testada, falta a fonte). No-op explícito e logado: silêncio aqui
+      // seria indistinguível de cron que não disparou.
+      console.log(
+        JSON.stringify({
+          event: "mark_cron_noop",
+          cron: controller.cron,
+          note: "markTrade pronto em report/mark.ts; falta feed de preço",
+        }),
+      );
       return;
     }
     ctx.waitUntil(

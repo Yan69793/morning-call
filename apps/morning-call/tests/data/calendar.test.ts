@@ -23,8 +23,6 @@ describe("calendar", () => {
   });
 
   it("todayTradeDateBrt formato", () => {
-    expect(todayTradeDateBrt(new Date("2026-07-15T12:00:00.000Z"))).toMatch(
-      /^\d{4}-\d{2}-\d{2}$/,
-    );
+    expect(todayTradeDateBrt(new Date("2026-07-15T12:00:00.000Z"))).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 });

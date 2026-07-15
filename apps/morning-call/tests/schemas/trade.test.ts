@@ -27,6 +27,7 @@ function direcional(over: Partial<Draft> = {}): unknown {
     direcao: "comprar",
     entrada: {
       tipo: "preco",
+      instrumento: "USDBRL",
       nivel: { value: 5.4, unit: "BRL_por_USD" },
       faixa: {
         min: { value: 5.38, unit: "BRL_por_USD" },
@@ -210,6 +211,7 @@ describe("TradeCardDraft, o que precisa ser rejeitado", () => {
       direcional({
         entrada: {
           tipo: "preco",
+          instrumento: "USDBRL",
           nivel: { value: 5.9, unit: "BRL_por_USD" },
           faixa: {
             min: { value: 5.38, unit: "BRL_por_USD" },

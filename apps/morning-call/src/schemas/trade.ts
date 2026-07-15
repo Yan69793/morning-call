@@ -55,6 +55,15 @@ export const Entry = z.discriminatedUnion("tipo", [
   /** Ativo único a preço: ação, moeda, índice, futuro. */
   z.object({
     tipo: z.literal("preco"),
+    /**
+     * Chave do ativo, no vocabulário do snapshot (ex.: "USDBRL", "IBOV").
+     *
+     * Os ramos `spread` e `premio` carregam o instrumento em cada perna; o `preco` não carregava
+     * nenhum, o que deixava o trade direcional anônimo. Sem isto, o gate de correlação do AD-7 não
+     * tem como saber de que ativo o trade fala, e era exatamente por isso que
+     * `trades_correlacionados_sem_justificativa` vivia hardcoded como lista vazia.
+     */
+    instrumento: z.string().min(1),
     nivel: Quantity,
     faixa: z.object({ min: Quantity, max: Quantity }),
   }),
@@ -170,6 +179,24 @@ export const TradeCardDraft = z
     path: ["perda_maxima"],
   });
 export type TradeCardDraft = z.infer<typeof TradeCardDraft>;
+
+/**
+ * Todos os instrumentos que um trade toca, qualquer que seja a forma de entrada.
+ *
+ * Existe para o gate de correlação: dois trades são redundantes quando tocam ativos correlacionados,
+ * e para saber isso é preciso primeiro saber que ativos são. Um steepener toca as duas pernas; um
+ * call spread, as duas opções; um direcional, o seu único ativo.
+ */
+export function tradeInstrumentos(draft: TradeCardDraft): string[] {
+  const e = draft.entrada;
+  switch (e.tipo) {
+    case "preco":
+      return [e.instrumento];
+    case "spread":
+    case "premio":
+      return e.pernas.map((p) => p.instrumento);
+  }
+}
 
 /**
  * Deriva o risco-retorno. Única fonte do número: nenhum agente pode declará-lo.

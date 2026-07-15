@@ -25,10 +25,7 @@ describe("computeAssetMetrics — Venue / as_of (PC-1)", () => {
   });
 
   it("falha se d1 cruza venues sem allowCrossVenue", () => {
-    const series: PriceBar[] = [
-      bar("2026-07-14", 5000, "US"),
-      bar("2026-07-15", 5100, "BR"),
-    ];
+    const series: PriceBar[] = [bar("2026-07-14", 5000, "US"), bar("2026-07-15", 5100, "BR")];
     expect(() =>
       computeAssetMetrics({
         key: "BAD",
@@ -40,10 +37,7 @@ describe("computeAssetMetrics — Venue / as_of (PC-1)", () => {
   });
 
   it("falha se barra individual diverge do venue do ativo", () => {
-    const series: PriceBar[] = [
-      bar("2026-07-14", 100, "BR"),
-      bar("2026-07-15", 101, "US"),
-    ];
+    const series: PriceBar[] = [bar("2026-07-14", 100, "BR"), bar("2026-07-15", 101, "US")];
     expect(() =>
       computeAssetMetrics({
         key: "IBOV",
@@ -55,10 +49,7 @@ describe("computeAssetMetrics — Venue / as_of (PC-1)", () => {
   });
 
   it("allowCrossVenue=true permite proxy multi-praça com janela marcada", () => {
-    const series: PriceBar[] = [
-      bar("2026-07-14", 100, "US"),
-      bar("2026-07-15", 105, "BR"),
-    ];
+    const series: PriceBar[] = [bar("2026-07-14", 100, "US"), bar("2026-07-15", 105, "BR")];
     const m = computeAssetMetrics({
       key: "PROXY",
       venue: "BR",
@@ -86,9 +77,9 @@ describe("computeAssetMetrics — Venue / as_of (PC-1)", () => {
   });
 
   it("lança em série vazia ou fora de ordem", () => {
-    expect(() =>
-      computeAssetMetrics({ key: "X", venue: "BR", unit: "BRL", series: [] }),
-    ).toThrow(/vazia/);
+    expect(() => computeAssetMetrics({ key: "X", venue: "BR", unit: "BRL", series: [] })).toThrow(
+      /vazia/,
+    );
     expect(() =>
       computeAssetMetrics({
         key: "X",

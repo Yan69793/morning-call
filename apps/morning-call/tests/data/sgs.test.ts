@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  observationsToPoint,
-  parseSgsDateToIso,
-  parseSgsJson,
-} from "../../src/data/bcb/sgs.js";
+import { observationsToPoint, parseSgsDateToIso, parseSgsJson } from "../../src/data/bcb/sgs.js";
 import { SNAPSHOT_KEYS } from "../../src/data/keys.js";
 
 describe("BCB SGS parse (fixture mock)", () => {

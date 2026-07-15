@@ -19,7 +19,27 @@ export default tseslint.config(
       "no-console": ["warn", { allow: ["warn", "error"] }],
     },
   },
-  // O próprio config fica fora: não é código de runtime e não está no tsconfig do Worker, então
-  // as regras type-checked não têm tipo para trabalhar em cima dele.
-  { ignores: ["dist/", ".wrangler/", "node_modules/", "coverage/", "eslint.config.js"] },
+  {
+    // No entry do Worker, `console.log` É o mecanismo de observabilidade: é o que sai no
+    // `wrangler tail`. Tratar como desleixo aqui empurraria o log para `console.warn`, que
+    // sinalizaria problema onde há operação normal.
+    files: ["apps/morning-call/src/index.ts"],
+    rules: { "no-console": "off" },
+  },
+  {
+    ignores: [
+      "dist/",
+      ".wrangler/",
+      "node_modules/",
+      "coverage/",
+      "eslint.config.js",
+      // O Radar Quant é produto próprio e traz o seu próprio tooling (o frontend tem
+      // `eslint.config.js`, e o worker roda `tsc --noEmit` como análise estática, por decisão
+      // registrada no CLAUDE.md dele). Impor as regras daqui sobre código que chegou pronto e em
+      // produção geraria dezenas de erros que não são bug, só divergência de convenção — e a
+      // reorganização de pastas não é a hora de reabrir a convenção de outro projeto.
+      // Reavaliar quando os dois apps convergirem de propósito, não como efeito colateral.
+      "apps/radar-quant/",
+    ],
+  },
 );

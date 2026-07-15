@@ -22,6 +22,7 @@ em produção e testados. Duplicar seria repetir o erro que este repositório do
 zero. É a disciplina do AD-3 já implementada por outro projeto da casa.
 
 **O que a mudança consertou no Radar Quant**, de graça:
+
 - `shared/types.ts` era **triplicado** (`worker/src/types.ts`, `frontend/src/types/index.ts`) e
   sincronizado à mão por `scripts/type-sync.ps1`, um script que só sabia detectar a divergência
   depois de acontecer e mandar `cp`. Um workspace troca a conferência pela impossibilidade.
@@ -32,11 +33,12 @@ zero. É a disciplina do AD-3 já implementada por outro projeto da casa.
   que existe justamente para barrar, falhando para o lado errado.
 
 **Rejeitado:**
-- *Absorver o Radar Quant.* Enterraria um produto que funciona dentro de um experimento que o
+
+- _Absorver o Radar Quant._ Enterraria um produto que funciona dentro de um experimento que o
   Portão 1 pode matar. O que já entrega valor não deve ser refém do que ainda não provou nada.
-- *Só copiar o `analytics.ts`.* Dois arquivos iguais divergem; é o mesmo defeito do
+- _Só copiar o `analytics.ts`._ Dois arquivos iguais divergem; é o mesmo defeito do
   `skill/morning-call/assets/trade_card.schema.json`, que nasceu divergente do AD-6 e segue assim.
-- *Consumir o Radar Quant via HTTP.* Acoplaria o runtime de um ao uptime do outro para reusar
+- _Consumir o Radar Quant via HTTP._ Acoplaria o runtime de um ao uptime do outro para reusar
   função pura, que é o tipo de coisa que se resolve com import.
 
 **Dívida registrada:** `packages/analytics` roda sem `noUncheckedIndexedAccess`, ao contrário do

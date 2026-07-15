@@ -52,20 +52,16 @@ export const usTreasuryProvider: DataProvider = {
     try {
       const res = await fetchFn(url);
       if (!res.ok) {
-        return [
-          SNAPSHOT_KEYS.UST_2Y,
-          SNAPSHOT_KEYS.UST_10Y,
-          SNAPSHOT_KEYS.UST_30Y,
-        ].map((k) => nd(k, `UST XML HTTP ${res.status}`, ctx.observedAt));
+        return [SNAPSHOT_KEYS.UST_2Y, SNAPSHOT_KEYS.UST_10Y, SNAPSHOT_KEYS.UST_30Y].map((k) =>
+          nd(k, `UST XML HTTP ${res.status}`, ctx.observedAt),
+        );
       }
       const xml = await res.text();
       const parsed = parseTreasuryXml(xml);
       if (!parsed) {
-        return [
-          SNAPSHOT_KEYS.UST_2Y,
-          SNAPSHOT_KEYS.UST_10Y,
-          SNAPSHOT_KEYS.UST_30Y,
-        ].map((k) => nd(k, "UST XML: parse falhou", ctx.observedAt));
+        return [SNAPSHOT_KEYS.UST_2Y, SNAPSHOT_KEYS.UST_10Y, SNAPSHOT_KEYS.UST_30Y].map((k) =>
+          nd(k, "UST XML: parse falhou", ctx.observedAt),
+        );
       }
       const asOf = `${parsed.date}T18:00:00.000Z`;
       const mk = (key: string, value: number): DataPoint => ({

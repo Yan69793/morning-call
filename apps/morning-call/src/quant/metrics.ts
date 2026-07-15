@@ -4,14 +4,7 @@
  * Retorno 1D que cruza praças sem flag explícita falha em código — não em prosa.
  * Números vêm de core.ts; este módulo só monta AssetMetrics com rastreio de janela.
  */
-import {
-  maxDrawdown,
-  momentum,
-  periodReturn,
-  realizedVol,
-  simpleReturn,
-  zscore,
-} from "./core.js";
+import { maxDrawdown, momentum, periodReturn, realizedVol, simpleReturn, zscore } from "./core.js";
 import type { AssetMetrics, ReturnWindow, WindowReturn } from "../schemas/quant.js";
 import type { Quantity, Unit, Venue } from "../schemas/common.js";
 
@@ -70,10 +63,7 @@ function windowReturn(
  * Resolve pontas para cada janela. Série curta: omite a janela (não inventa).
  * mtd/ytd usam primeiro ponto do mês/ano civil da última barra (aprox. pregão).
  */
-function buildWindows(
-  series: readonly PriceBar[],
-  allowCrossVenue: boolean,
-): WindowReturn[] {
+function buildWindows(series: readonly PriceBar[], allowCrossVenue: boolean): WindowReturn[] {
   if (series.length < 2) return [];
   const last = series[series.length - 1]!;
   const out: WindowReturn[] = [];
@@ -152,9 +142,7 @@ export function computeAssetMetrics(input: ComputeAssetMetricsInput): AssetMetri
   if (!allowCrossVenue) {
     for (const b of series) {
       if (b.venue !== venue) {
-        throw new Error(
-          `barra ${b.t} venue ${b.venue} ≠ venue do ativo ${venue} (key=${key})`,
-        );
+        throw new Error(`barra ${b.t} venue ${b.venue} ≠ venue do ativo ${venue} (key=${key})`);
       }
     }
   }

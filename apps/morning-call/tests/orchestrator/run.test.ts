@@ -8,7 +8,7 @@ const env = {} as Env;
 
 const mockProvider: DataProvider = {
   name: "mock",
-  async fetch(ctx) {
+  fetch(ctx) {
     const p: DataPoint = {
       status: "OK",
       key: "SELIC_META",
@@ -27,7 +27,7 @@ const mockProvider: DataProvider = {
       as_of: "2026-07-14T18:00:00.000Z",
       observed_at: ctx.observedAt,
     };
-    return [p, fx];
+    return Promise.resolve([p, fx]);
   },
 };
 
@@ -44,9 +44,7 @@ function mockContent() {
       premissa_que_sustenta_precos: rationale,
       fato_que_quebraria: rationale,
     },
-    quant_claims: [
-      { snapshot_key: "SELIC_META", valor_citado: { value: 15, unit: "pct" } },
-    ],
+    quant_claims: [{ snapshot_key: "SELIC_META", valor_citado: { value: 15, unit: "pct" } }],
     trades: [],
     cenarios: [
       {

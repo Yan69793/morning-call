@@ -37,7 +37,12 @@ export function lastValidFred(
   return null;
 }
 
-function nd(key: string, reason: string, observedAt: string, venue: "US" | "GLOBAL_24H"): DataPoint {
+function nd(
+  key: string,
+  reason: string,
+  observedAt: string,
+  venue: "US" | "GLOBAL_24H",
+): DataPoint {
   return { status: "ND", key, venue, reason, observed_at: observedAt };
 }
 

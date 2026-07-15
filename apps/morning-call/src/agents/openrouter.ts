@@ -1,6 +1,25 @@
 /**
  * Cliente OpenRouter mínimo. Timeout + erro tipado. Sem log de key.
  */
+import { z } from "zod";
+
+/**
+ * A resposta do provedor é entrada não confiável como qualquer outra: vem da rede, muda sem aviso
+ * e não tem contrato conosco. `res.json()` devolve `unknown`, e o código lia `json.choices[0]...`
+ * direto — se o formato mudasse, o erro apareceria como `undefined` lá na frente, longe da causa.
+ * Validar aqui faz a falha aparecer na fronteira, com o nome do campo que faltou.
+ */
+const OpenRouterResponse = z.object({
+  choices: z.array(z.object({ message: z.object({ content: z.string() }) })).min(1),
+  model: z.string().optional(),
+  usage: z
+    .object({
+      prompt_tokens: z.number().optional(),
+      completion_tokens: z.number().optional(),
+    })
+    .optional(),
+});
+
 export interface ChatMessage {
   role: "system" | "user" | "assistant";
   content: string;
@@ -61,12 +80,16 @@ export async function chatCompletion(opts: OpenRouterOptions): Promise<OpenRoute
       const text = await res.text().catch(() => "");
       throw new OpenRouterError(`OpenRouter HTTP ${res.status}: ${text.slice(0, 200)}`, res.status);
     }
-    const json = (await res.json()) as {
-      choices?: { message?: { content?: string } }[];
-      model?: string;
-      usage?: { prompt_tokens?: number; completion_tokens?: number };
-    };
-    const content = json.choices?.[0]?.message?.content;
+    const parsed = OpenRouterResponse.safeParse(await res.json());
+    if (!parsed.success) {
+      throw new OpenRouterError(
+        `OpenRouter: resposta fora do contrato — ${parsed.error.issues
+          .map((i) => `${i.path.join(".")}: ${i.message}`)
+          .join("; ")}`,
+      );
+    }
+    const json = parsed.data;
+    const content = json.choices[0]!.message.content;
     if (!content) throw new OpenRouterError("OpenRouter: content vazio");
     return {
       content,

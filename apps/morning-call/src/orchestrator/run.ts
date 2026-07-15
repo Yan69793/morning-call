@@ -123,8 +123,13 @@ export async function runMorningCall(opts: RunOptions): Promise<RunResult> {
     snapshot,
     claims: strat.claims,
     trades: strat.trades,
+    correlacoes: metrics.correlacoes_63d,
   });
-  const { published, rejected } = filterPublishableTrades(strat.trades, gates.crossCheck.ok);
+  const { published, rejected } = filterPublishableTrades(
+    strat.trades,
+    gates.crossCheck.ok,
+    metrics.correlacoes_63d,
+  );
 
   // [5] persist
   if (!opts.dryRun) {
@@ -156,7 +161,10 @@ export async function runMorningCall(opts: RunOptions): Promise<RunResult> {
     trades: published,
     provenance: strat.provenance,
   });
-  const validation = validateMorningCall(morningCall);
+  const validation = validateMorningCall(morningCall, {
+    crossCheck: gates.crossCheck,
+    correlacionados: gates.correlacionados,
+  });
 
   if (!opts.dryRun) {
     const r2Key = `morning-call/${tradeDate}/${runId}.json`;
@@ -174,8 +182,7 @@ export async function runMorningCall(opts: RunOptions): Promise<RunResult> {
       aprovado: validation.aprovado && gates.ok,
       payload: { morningCall, validation, gateReasons: gates.reasons },
     });
-    const status =
-      faltantes.length > 0 || !validation.aprovado || !gates.ok ? "partial" : "ok";
+    const status = faltantes.length > 0 || !validation.aprovado || !gates.ok ? "partial" : "ok";
     await finishRun(opts.env.DB, runId, status, faltantes, generatedAt);
   }
 

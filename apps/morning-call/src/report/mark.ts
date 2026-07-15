@@ -40,19 +40,11 @@ function signedPnl(direcao: "comprar" | "vender", entrada: number, preco: number
   return direcao === "comprar" ? raw : -raw;
 }
 
-function hitTarget(
-  direcao: "comprar" | "vender",
-  preco: number,
-  target: number,
-): boolean {
+function hitTarget(direcao: "comprar" | "vender", preco: number, target: number): boolean {
   return direcao === "comprar" ? preco >= target : preco <= target;
 }
 
-function hitInvalidation(
-  direcao: "comprar" | "vender",
-  preco: number,
-  inv: number,
-): boolean {
+function hitInvalidation(direcao: "comprar" | "vender", preco: number, inv: number): boolean {
   return direcao === "comprar" ? preco <= inv : preco >= inv;
 }
 
@@ -64,7 +56,10 @@ export function markTrade(input: OpenTradeMarkInput): TradeMarkRow {
   let status: MarkStatus = "aberto";
   if (input.expirado) {
     status = "expirado";
-  } else if (input.invalidacao !== null && hitInvalidation(input.direcao, input.preco, input.invalidacao)) {
+  } else if (
+    input.invalidacao !== null &&
+    hitInvalidation(input.direcao, input.preco, input.invalidacao)
+  ) {
     status = "invalidado";
   } else if (hitTarget(input.direcao, input.preco, input.alvo_2)) {
     status = "alvo_2";
