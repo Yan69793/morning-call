@@ -5,7 +5,10 @@
   "description": "Monorepo: Morning Call (brief macro) + Radar Quant Brasil (radar técnico), sobre um núcleo analítico compartilhado",
   "type": "module",
   "workspaces": [
-    "apps/morning-call"
+    "packages/analytics",
+    "apps/morning-call",
+    "apps/radar-quant/worker",
+    "apps/radar-quant/frontend"
   ],
   "scripts": {
     "test": "npm run test --workspaces --if-present",

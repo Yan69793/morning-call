@@ -1,0 +1,207 @@
+//@version=6
+// RSI + MACD + Fibonacci Confluence (automático) — v1.2
+// Melhorias: filtro de volume, filtro de tendência HTF, Stop/Alvo no gráfico, score 0-4 + cooldown, tabela de preços Fibonacci
+indicator("RSI+MACD+Fib Confluence [Auto]", shorttitle="RMF Conf", overlay=true, max_lines_count=50, max_labels_count=50)
+
+// ============================ INPUTS ============================
+grpR = "RSI"
+rsiLen      = input.int(14, "RSI Length", minval=1, group=grpR, tooltip="14 padrão; 21 (número de Fibonacci) é mais suave")
+rsiLongMin  = input.int(45, "RSI mín. p/ COMPRA", minval=1, maxval=100, group=grpR)
+rsiLongMax  = input.int(70, "RSI máx. p/ COMPRA", minval=1, maxval=100, group=grpR)
+rsiShortMin = input.int(30, "RSI mín. p/ VENDA",  minval=1, maxval=100, group=grpR)
+rsiShortMax = input.int(55, "RSI máx. p/ VENDA",  minval=1, maxval=100, group=grpR)
+
+grpM = "MACD"
+macdFast = input.int(12, "MACD Rápida", minval=1, group=grpM)
+macdSlow = input.int(26, "MACD Lenta",  minval=1, group=grpM)
+macdSig  = input.int(9,  "MACD Sinal",  minval=1, group=grpM)
+
+grpT = "Tendência (EMA)"
+emaFastLen = input.int(8,  "EMA rápida", minval=1, group=grpT)
+emaSlowLen = input.int(34, "EMA lenta",  minval=1, group=grpT)
+
+grpH = "Tendência maior (HTF)"
+useHTF = input.bool(true, "Exigir alinhamento com timeframe maior", group=grpH)
+htfRes = input.timeframe("D", "Timeframe maior", group=grpH, tooltip="Ex.: D no intraday. EMA lenta nesse TF corta sinais contra a tendência maior.")
+
+grpVol = "Volume"
+useVol  = input.bool(true, "Exigir volume acima da média", group=grpVol)
+volLen  = input.int(20, "Média de volume", minval=1, group=grpVol)
+volMult = input.float(1.0, "Volume mín. = média ×", step=0.1, group=grpVol)
+
+grpF = "Fibonacci (automático)"
+pivLeft      = input.int(15, "Pivot esquerda", minval=1, group=grpF, tooltip="Barras à esquerda p/ confirmar o swing")
+pivRight     = input.int(15, "Pivot direita",  minval=1, group=grpF, tooltip="Barras à direita p/ confirmar o swing")
+showFib      = input.bool(true, "Mostrar níveis de Fibonacci no gráfico", group=grpF)
+showFibTable = input.bool(true, "Mostrar tabela de preços Fibonacci", group=grpF)
+
+grpRisk = "Risco (ATR)"
+atrLen  = input.int(14, "ATR Length", minval=1, group=grpRisk)
+slMult  = input.float(1.5, "Stop = ATR ×", step=0.1, group=grpRisk)
+tpMult  = input.float(2.0, "Alvo = ATR ×", step=0.1, group=grpRisk)
+
+grpV = "Visual"
+showSignals  = input.bool(true, "Mostrar setas de sinal", group=grpV)
+showTable    = input.bool(true, "Mostrar painel", group=grpV)
+showRisk     = input.bool(true, "Desenhar Stop/Alvo no gráfico", group=grpV)
+cooldownBars = input.int(5, "Cooldown (barras entre sinais)", minval=0, group=grpV)
+
+// ============================ CÁLCULOS ============================
+rsi  = ta.rsi(close, rsiLen)
+[macdLine, signalLine, _] = ta.macd(close, macdFast, macdSlow, macdSig)
+emaFast = ta.ema(close, emaFastLen)
+emaSlow = ta.ema(close, emaSlowLen)
+atr = ta.atr(atrLen)
+volAvg = ta.sma(volume, volLen)
+volOk  = not useVol or (volume > volAvg * volMult)
+
+// ---- Tendência de timeframe maior ----
+htfEma = request.security(syminfo.tickerid, htfRes, ta.ema(close, emaSlowLen), lookahead=barmerge.lookahead_off)
+htfUp  = not useHTF or close > htfEma
+htfDn  = not useHTF or close < htfEma
+
+// ---- Swings p/ Fibonacci ----
+ph = ta.pivothigh(high, pivLeft, pivRight)
+pl = ta.pivotlow(low,  pivLeft, pivRight)
+var float swHigh    = na
+var float swLow     = na
+var int   swHighBar = na
+var int   swLowBar  = na
+if not na(ph)
+    swHigh    := ph
+    swHighBar := bar_index - pivRight
+if not na(pl)
+    swLow    := pl
+    swLowBar := bar_index - pivRight
+
+haveFib = not na(swHigh) and not na(swLow)
+upLeg   = haveFib ? (nz(swHighBar, -1) >= nz(swLowBar, -1)) : true
+rng     = haveFib ? (swHigh - swLow) : na
+
+fibPrice(float r) =>
+    haveFib ? (upLeg ? swHigh - rng * r : swLow + rng * r) : na
+
+fib618 = fibPrice(0.618)
+
+// ============================ SINAIS (confluência) ============================
+trendUp = emaFast > emaSlow
+trendDn = emaFast < emaSlow
+macdUp  = macdLine > signalLine
+rsiLongOk  = rsi > rsiLongMin  and rsi < rsiLongMax
+rsiShortOk = rsi < rsiShortMax and rsi > rsiShortMin
+fibLongOk  = not haveFib or close > fib618
+fibShortOk = not haveFib or close < fib618
+
+// Score 0-4 (pilares clássicos: tendência, MACD, RSI, Fib)
+longScore  = (trendUp ? 1 : 0) + (macdUp ? 1 : 0) + (rsiLongOk ? 1 : 0) + (fibLongOk ? 1 : 0)
+shortScore = (trendDn ? 1 : 0) + ((not macdUp) ? 1 : 0) + (rsiShortOk ? 1 : 0) + (fibShortOk ? 1 : 0)
+
+longSig  = trendUp and macdUp and rsiLongOk  and fibLongOk  and volOk and htfUp
+shortSig = trendDn and (not macdUp) and rsiShortOk and fibShortOk and volOk and htfDn
+
+// Cooldown entre sinais
+var int lastSigBar = na
+rawLong  = longSig  and not longSig[1]
+rawShort = shortSig and not shortSig[1]
+canFire  = na(lastSigBar) or (bar_index - lastSigBar) >= cooldownBars
+longTrig  = rawLong  and canFire
+shortTrig = rawShort and canFire
+if longTrig or shortTrig
+    lastSigBar := bar_index
+
+plotshape(showSignals and longTrig,  title="COMPRA", style=shape.labelup,   location=location.belowbar, color=color.new(color.green, 0), text="COMPRA", textcolor=color.white, size=size.small)
+plotshape(showSignals and shortTrig, title="VENDA",  style=shape.labeldown, location=location.abovebar, color=color.new(color.red, 0),   text="VENDA",  textcolor=color.white, size=size.small)
+
+alertcondition(longTrig,  title="Sinal de COMPRA (confluência)", message="RMF: COMPRA — EMA+MACD+RSI+Fib+Vol+HTF em {{ticker}} @ {{close}}")
+alertcondition(shortTrig, title="Sinal de VENDA (confluência)",  message="RMF: VENDA — EMA+MACD+RSI+Fib+Vol+HTF em {{ticker}} @ {{close}}")
+
+// ============================ STOP / ALVO NO GRÁFICO ============================
+var line[]  rLines  = array.new_line()
+var label[] rLabels = array.new_label()
+if showRisk and (longTrig or shortTrig)
+    slP = longTrig ? close - atr * slMult : close + atr * slMult
+    tpP = longTrig ? close + atr * tpMult : close - atr * tpMult
+    xR  = bar_index + 20
+    array.push(rLines,  line.new(bar_index, slP, xR, slP, color=color.new(color.red, 0),  width=1, style=line.style_dashed))
+    array.push(rLines,  line.new(bar_index, tpP, xR, tpP, color=color.new(color.lime, 0), width=1, style=line.style_dashed))
+    array.push(rLabels, label.new(xR, slP, "SL "   + str.tostring(slP, format.mintick), style=label.style_label_left, color=color.new(color.red, 80),  textcolor=color.red,  size=size.small))
+    array.push(rLabels, label.new(xR, tpP, "Alvo " + str.tostring(tpP, format.mintick), style=label.style_label_left, color=color.new(color.lime, 80), textcolor=color.lime, size=size.small))
+    while array.size(rLines) > 12
+        line.delete(array.shift(rLines))
+    while array.size(rLabels) > 12
+        label.delete(array.shift(rLabels))
+
+// ============================ FIBONACCI (desenho no gráfico) ============================
+ratios = array.from(0.0, 0.236, 0.382, 0.5, 0.618, 0.786, 1.0)
+var line[]  fLines  = array.new_line()
+var label[] fLabels = array.new_label()
+if barstate.islast
+    if array.size(fLines) > 0
+        for i = 0 to array.size(fLines) - 1
+            line.delete(array.get(fLines, i))
+        array.clear(fLines)
+    if array.size(fLabels) > 0
+        for i = 0 to array.size(fLabels) - 1
+            label.delete(array.get(fLabels, i))
+        array.clear(fLabels)
+    if showFib and haveFib
+        int xL  = int(math.min(nz(swHighBar, bar_index), nz(swLowBar, bar_index)))
+        int xRf = bar_index + 10
+        for i = 0 to array.size(ratios) - 1
+            r   = array.get(ratios, i)
+            lvl = fibPrice(r)
+            isKey = r == 0.618
+            col = (r == 0.0 or r == 1.0) ? color.gray : r == 0.5 ? color.blue : isKey ? color.green : color.orange
+            array.push(fLines,  line.new(xL, lvl, xRf, lvl, color=color.new(col, 10), width=isKey ? 2 : 1, style=isKey ? line.style_solid : line.style_dotted))
+            array.push(fLabels, label.new(xRf, lvl, str.tostring(r * 100, "#.#") + "%  " + str.tostring(lvl, "#.##"), style=label.style_label_left, color=color.new(col, 85), textcolor=color.new(col, 0), size=size.small))
+
+// ============================ PAINEL ============================
+var table pnl = table.new(position.top_right, 2, 11, frame_color=color.new(color.gray, 40), frame_width=1, border_width=1)
+if showTable and barstate.islast
+    bg = color.new(color.black, 20)
+    rsiState   = rsi >= 70 ? "sobrecomprado" : rsi <= 30 ? "sobrevendido" : "neutro"
+    trendState = trendUp ? "alta" : trendDn ? "baixa" : "lateral"
+    biasTxt    = longSig ? "COMPRA" : shortSig ? "VENDA" : "—"
+    biasCol    = longSig ? color.green : shortSig ? color.red : color.gray
+    scoreShown = longSig ? longScore : shortSig ? shortScore : math.max(longScore, shortScore)
+    scoreCol   = scoreShown >= 4 ? color.lime : scoreShown >= 2 ? color.yellow : color.red
+    htfTxt     = not useHTF ? "—" : (close > htfEma ? "alta" : "baixa")
+    htfCol     = not useHTF ? color.white : (close > htfEma ? color.lime : color.red)
+    sl = longSig ? close - atr * slMult : shortSig ? close + atr * slMult : na
+    tp = longSig ? close + atr * tpMult : shortSig ? close - atr * tpMult : na
+    table.cell(pnl, 0, 0, "RMF Confluence", text_color=color.white, text_size=size.small, bgcolor=color.new(color.blue, 0))
+    table.cell(pnl, 1, 0, syminfo.ticker,   text_color=color.white, text_size=size.small, bgcolor=color.new(color.blue, 0))
+    table.cell(pnl, 0, 1, "RSI(" + str.tostring(rsiLen) + ")", text_color=color.silver, text_size=size.small, bgcolor=bg)
+    table.cell(pnl, 1, 1, str.tostring(rsi, "#.#") + " " + rsiState, text_color=rsi >= 70 ? color.red : rsi <= 30 ? color.lime : color.white, text_size=size.small, bgcolor=bg)
+    table.cell(pnl, 0, 2, "MACD", text_color=color.silver, text_size=size.small, bgcolor=bg)
+    table.cell(pnl, 1, 2, macdUp ? "altista" : "baixista", text_color=macdUp ? color.lime : color.red, text_size=size.small, bgcolor=bg)
+    table.cell(pnl, 0, 3, "Tendência", text_color=color.silver, text_size=size.small, bgcolor=bg)
+    table.cell(pnl, 1, 3, trendState, text_color=trendUp ? color.lime : trendDn ? color.red : color.white, text_size=size.small, bgcolor=bg)
+    table.cell(pnl, 0, 4, "Fib 61.8%", text_color=color.silver, text_size=size.small, bgcolor=bg)
+    table.cell(pnl, 1, 4, haveFib ? str.tostring(fib618, "#.##") : "—", text_color=color.white, text_size=size.small, bgcolor=bg)
+    table.cell(pnl, 0, 5, "Volume", text_color=color.silver, text_size=size.small, bgcolor=bg)
+    table.cell(pnl, 1, 5, not useVol ? "off" : (volOk ? "ok" : "fraco"), text_color=not useVol ? color.white : (volOk ? color.lime : color.red), text_size=size.small, bgcolor=bg)
+    table.cell(pnl, 0, 6, "HTF " + htfRes, text_color=color.silver, text_size=size.small, bgcolor=bg)
+    table.cell(pnl, 1, 6, htfTxt, text_color=htfCol, text_size=size.small, bgcolor=bg)
+    table.cell(pnl, 0, 7, "Confluência", text_color=color.silver, text_size=size.small, bgcolor=bg)
+    table.cell(pnl, 1, 7, str.tostring(scoreShown) + "/4", text_color=scoreCol, text_size=size.small, bgcolor=bg)
+    table.cell(pnl, 0, 8, "Viés", text_color=color.silver, text_size=size.small, bgcolor=bg)
+    table.cell(pnl, 1, 8, biasTxt, text_color=biasCol, text_size=size.small, bgcolor=bg)
+    table.cell(pnl, 0, 9, "Stop (ATR)", text_color=color.silver, text_size=size.small, bgcolor=bg)
+    table.cell(pnl, 1, 9, na(sl) ? "—" : str.tostring(sl, "#.##"), text_color=color.red, text_size=size.small, bgcolor=bg)
+    table.cell(pnl, 0, 10, "Alvo (ATR)", text_color=color.silver, text_size=size.small, bgcolor=bg)
+    table.cell(pnl, 1, 10, na(tp) ? "—" : str.tostring(tp, "#.##"), text_color=color.lime, text_size=size.small, bgcolor=bg)
+
+// ============================ TABELA DE PREÇOS FIBONACCI ============================
+var table fibT = table.new(position.bottom_right, 2, 8, frame_color=color.new(color.gray, 40), frame_width=1, border_width=1)
+if showFibTable and barstate.islast
+    table.cell(fibT, 0, 0, "Fibonacci", text_color=color.white, text_size=size.small, bgcolor=color.new(color.orange, 0))
+    table.cell(fibT, 1, 0, haveFib ? "preço" : "sem swing", text_color=color.white, text_size=size.small, bgcolor=color.new(color.orange, 0))
+    for i = 0 to array.size(ratios) - 1
+        rr = array.get(ratios, i)
+        lv = fibPrice(rr)
+        isK = rr == 0.618
+        fc  = (rr == 0.0 or rr == 1.0) ? color.gray : rr == 0.5 ? color.blue : isK ? color.lime : color.orange
+        bgc = color.new(color.black, 20)
+        table.cell(fibT, 0, i + 1, str.tostring(rr * 100, "#.#") + "%", text_color=fc, text_size=size.small, bgcolor=bgc)
+        table.cell(fibT, 1, i + 1, na(lv) ? "—" : str.tostring(lv, "#.##"), text_color=color.white, text_size=size.small, bgcolor=bgc)

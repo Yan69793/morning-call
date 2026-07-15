@@ -1,0 +1,15 @@
+{
+  "name": "@sz/analytics",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Núcleo analítico compartilhado: métricas, flags de qualidade, score e regime. Funções puras, sem I/O.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./types": "./src/types.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  }
+}

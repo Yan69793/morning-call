@@ -1,0 +1,36 @@
+{
+  "scanId": "2026-06-15T2200-0300",
+  "schemaVersion": "1.1.0",
+  "methodologyVersion": "1.0.0",
+  "universeVersion": "1.1.0",
+  "generatedAt": "2026-06-15T22:00:00-03:00",
+  "marketDate": "2026-06-15",
+  "timezone": "America/Sao_Paulo",
+  "warnings": [],
+  "news": {
+    "generatedAt": "2026-06-15T22:00:00-03:00",
+    "macro": [
+      { "title": "Copom mantém Selic e sinaliza cautela", "source": "Valor", "url": "https://valor.globo.com/copom-selic", "publishedAt": "2026-06-15T18:30:00-03:00", "summary": "Comitê manteve a taxa e citou riscos fiscais." },
+      { "title": "Dólar recua com fluxo estrangeiro", "source": "InfoMoney", "url": "https://infomoney.com.br/dolar-fluxo", "publishedAt": "2026-06-15T17:10:00-03:00" }
+    ]
+  },
+  "items": [
+    {
+      "symbol": "BMFBOVESPA:IBOV", "name": "Ibovespa", "type": "macro", "kind": "indice", "sector": null,
+      "last": 171132.66,
+      "metrics": { "ret_1d": 1.2, "ret_5d": -0.8, "ret_20d": -5.1, "ret_60d": -3.2, "ret_120d": 2.1, "rangePos_60d": 18.0, "upDays_5": 2 },
+      "score": -38, "bias": { "label": "viés de baixa", "strength": "moderado" }, "regime": "BAIXA", "alert": false,
+      "quality": { "partialSession": false, "missingBars": false, "staleLastBar": false, "flatRange": false, "symbolError": false }
+    },
+    {
+      "symbol": "BMFBOVESPA:PRIO3", "name": "PRIO ON", "type": "acao", "kind": "acao", "sector": "Energia",
+      "last": 48.3,
+      "metrics": { "ret_1d": 2.1, "ret_5d": 5.0, "ret_20d": 9.2, "ret_60d": 14.0, "ret_120d": 22.0, "rangePos_60d": 78.0, "upDays_5": 4 },
+      "score": 62, "bias": { "label": "viés de alta", "strength": "forte" }, "regime": "ALTA", "alert": false,
+      "quality": { "partialSession": false, "missingBars": false, "staleLastBar": false, "flatRange": false, "symbolError": false },
+      "news": [
+        { "title": "PRIO anuncia produção recorde em campo offshore", "source": "Brazil Journal", "url": "https://braziljournal.com/prio-recorde", "publishedAt": "2026-06-15T12:00:00-03:00" }
+      ]
+    }
+  ]
+}

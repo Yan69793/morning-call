@@ -1,0 +1,12 @@
+{
+  "name": "radar-quant-brasil",
+  "private": true,
+  "workspaces": ["worker", "frontend"],
+  "scripts": {
+    "dev:worker": "npm run dev --workspace=worker",
+    "dev:frontend": "npm run dev --workspace=frontend",
+    "deploy:worker": "npm run deploy --workspace=worker",
+    "deploy:frontend": "npm run deploy --workspace=frontend",
+    "type-sync": "powershell -ExecutionPolicy Bypass -File scripts/type-sync.ps1"
+  }
+}

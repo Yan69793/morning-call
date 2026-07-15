@@ -5,6 +5,47 @@ reabrir sem evidência nova (preferência do projeto: só revisar posição dian
 
 ---
 
+## AD-8 — Monorepo: Morning Call e Radar Quant Brasil, sobre um núcleo compartilhado
+
+**Decisão (2026-07-15):** este repositório deixa de ser "o Morning Call" e passa a hospedar dois
+apps com deploys independentes (`apps/morning-call`, `apps/radar-quant`) sobre um pacote comum
+(`packages/analytics`). O Radar Quant Brasil **continua sendo produto próprio**, com seu D1
+(`radar-quant`), seu KV, seu Worker e seu dashboard. Não foi absorvido nem congelado.
+
+**Por quê:** os dois calculavam a mesma coisa de formas diferentes. O Morning Call precisava de
+retorno multi-janela, flag de qualidade de série e feed de preços; o Radar Quant já tinha os três,
+em produção e testados. Duplicar seria repetir o erro que este repositório documenta em toda parte.
+
+**O que o núcleo trouxe de volta**, e que o Morning Call não tinha: `Quality` com `staleLastBar` e
+`partialSession` (o `as_of` da PC-1 operacionalizado), `computeMetrics` devolvendo `null` em vez de
+`0` quando falta barra, e `weightedAvailable` renormalizando peso ausente em vez de tratá-lo como
+zero. É a disciplina do AD-3 já implementada por outro projeto da casa.
+
+**O que a mudança consertou no Radar Quant**, de graça:
+- `shared/types.ts` era **triplicado** (`worker/src/types.ts`, `frontend/src/types/index.ts`) e
+  sincronizado à mão por `scripts/type-sync.ps1`, um script que só sabia detectar a divergência
+  depois de acontecer e mandar `cp`. Um workspace troca a conferência pela impossibilidade.
+- `Regime` era declarado idêntico em `types.ts` e `signal-rules.ts`.
+- `shared/` **nunca era typecheckado**: o `tsconfig.json` do worker incluía só `src/**`. Ao virar
+  pacote com tsconfig próprio, apareceram 4 erros de tipo reais que existiam sem ninguém ver,
+  incluindo `isRankable` lendo `item.quality || {}` — item sem qualidade apurada passava no gate
+  que existe justamente para barrar, falhando para o lado errado.
+
+**Rejeitado:**
+- *Absorver o Radar Quant.* Enterraria um produto que funciona dentro de um experimento que o
+  Portão 1 pode matar. O que já entrega valor não deve ser refém do que ainda não provou nada.
+- *Só copiar o `analytics.ts`.* Dois arquivos iguais divergem; é o mesmo defeito do
+  `skill/morning-call/assets/trade_card.schema.json`, que nasceu divergente do AD-6 e segue assim.
+- *Consumir o Radar Quant via HTTP.* Acoplaria o runtime de um ao uptime do outro para reusar
+  função pura, que é o tipo de coisa que se resolve com import.
+
+**Dívida registrada:** `packages/analytics` roda sem `noUncheckedIndexedAccess`, ao contrário do
+Morning Call. São 8 acessos indexados prováveis-falsos-positivos; ligar a flag é mudança com seus
+próprios testes, não efeito colateral de mover pasta. Ver comentário em
+`packages/analytics/tsconfig.json`.
+
+---
+
 ## AD-1 — Runtime: Cloudflare Workers (estender o VixRadar), não Python/Docker
 
 **Decisão:** o sistema roda como Worker(s) em TypeScript, reutilizando a infra do VixRadar

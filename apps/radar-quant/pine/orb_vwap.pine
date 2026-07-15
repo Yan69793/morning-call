@@ -1,0 +1,76 @@
+//@version=6
+strategy("ORB + VWAP — BTC/IBOV", overlay=true, default_qty_type=strategy.percent_of_equity, default_qty_value=10, commission_type=strategy.commission.percent, commission_value=0.05, initial_capital=100)
+
+// ---- Inputs ----
+or_bars   = input.int(2,     "Barras do Opening Range", tooltip="2×15min=30min | 4×15min=1h")
+stop_pct  = input.float(2.0, "Stop Loss %",  step=0.1, minval=0.1)
+rr        = input.float(3.0, "Risk/Reward",  step=0.1, minval=0.5)
+use_vwap  = input.bool(false, "Filtro VWAP")
+allow_sh  = input.bool(true,  "Permitir Short")
+mode_24h  = input.bool(true,  "Modo 24/7 (BTC) — desligar para IBOV")
+ibov_sess = input.session("1000-1755", "Sessao IBOV (ignorado no modo 24/7)")
+ibov_tz   = input.string("America/Sao_Paulo", "Timezone IBOV", options=["America/Sao_Paulo", "America/New_York", "UTC"])
+
+// ---- VWAP ----
+vwap_v = ta.vwap(hlc3)
+
+// ---- Deteccao de inicio de periodo ----
+in_session    = mode_24h ? true : not na(time(timeframe.period, ibov_sess, ibov_tz))
+is_new_period = mode_24h ? ta.change(time("D")) != 0 : in_session and not in_session[1]
+
+// ---- Controle da OR ----
+var int   n          = 0
+var float or_h       = na
+var float or_l       = na
+var bool  or_ready   = false
+var bool  done_today = false
+
+if is_new_period
+    n          := 0
+    or_h       := na
+    or_l       := na
+    or_ready   := false
+    done_today := false
+
+if in_session
+    n += 1
+    if n <= or_bars
+        or_h := na(or_h) ? high : math.max(or_h, high)
+        or_l := na(or_l) ? low  : math.min(or_l, low)
+
+or_ready := n > or_bars
+
+// ---- Sinais ----
+can = or_ready and not done_today and strategy.position_size == 0 and in_session
+
+long_sig  = can and close > or_h and close[1] <= or_h and (not use_vwap or close > vwap_v)
+short_sig = can and close < or_l and close[1] >= or_l and (not use_vwap or close < vwap_v) and allow_sh
+
+// ---- Execucao ----
+if long_sig
+    sl = close * (1 - stop_pct / 100)
+    tp = close + (close - sl) * rr
+    strategy.entry("Long", strategy.long)
+    strategy.exit("X Long", "Long", stop=sl, limit=tp)
+    alert("ORB LONG " + syminfo.ticker + " @ R$" + str.tostring(close, "#.##") + " | SL R$" + str.tostring(sl, "#.##") + " | TP R$" + str.tostring(tp, "#.##"), alert.freq_once_per_bar)
+    done_today := true
+
+if short_sig
+    sl = close * (1 + stop_pct / 100)
+    tp = close - (sl - close) * rr
+    strategy.entry("Short", strategy.short)
+    strategy.exit("X Short", "Short", stop=sl, limit=tp)
+    alert("ORB SHORT " + syminfo.ticker + " @ R$" + str.tostring(close, "#.##") + " | SL R$" + str.tostring(sl, "#.##") + " | TP R$" + str.tostring(tp, "#.##"), alert.freq_once_per_bar)
+    done_today := true
+
+// ---- Visualizacao ----
+plot(vwap_v, "VWAP",    color=color.purple, linewidth=2)
+plot(or_h,   "OR High", color=or_ready ? color.green : color.new(color.green, 60), style=plot.style_stepline, linewidth=2)
+plot(or_l,   "OR Low",  color=or_ready ? color.red   : color.new(color.red,   60), style=plot.style_stepline, linewidth=2)
+
+plotshape(long_sig,  "Long",  shape.triangleup,  location.belowbar, color.lime, size=size.normal)
+plotshape(short_sig, "Short", shape.triangledown, location.abovebar, color.red,  size=size.normal)
+
+bgcolor(in_session and n <= or_bars ? color.new(color.yellow, 90) : na, title="Periodo OR")
+bgcolor(strategy.position_size > 0 ? color.new(color.green, 92) : strategy.position_size < 0 ? color.new(color.red, 92) : na, title="Em posicao")
+

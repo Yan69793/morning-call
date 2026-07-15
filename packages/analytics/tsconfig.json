@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022"],
+    "strict": true,
+    // DÍVIDA CONHECIDA, deliberada: o Morning Call usa `noUncheckedIndexedAccess: true`, e este
+    // pacote não. O código veio do Radar Quant, onde foi escrito sob esta regra e está em
+    // produção com 33 testes passando. Ligar a flag agora acusa 8 acessos indexados que o
+    // compilador não consegue provar seguros (ex.: `bars[bars.length - 1].close`, protegido por
+    // um early-return de length que o TS não correlaciona). São falsos positivos prováveis, não
+    // bugs — mas "prováveis" não é "verificados", e subir a barra é uma mudança de comportamento
+    // que merece seus próprios testes, não um efeito colateral de reorganizar pastas.
+    // Próximo passo registrado: ligar a flag e tratar os 8 pontos com guardas explícitas.
+    "noUncheckedIndexedAccess": false,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "noEmit": true
+  },
+  "include": ["src", "tests"]
+}
