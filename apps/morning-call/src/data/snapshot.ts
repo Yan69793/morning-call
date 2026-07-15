@@ -6,6 +6,7 @@ import { MarketSnapshot, type DataPoint } from "../schemas/data.js";
 import type { DataProvider, DataProviderContext } from "./types.js";
 import { bcbSgsProvider } from "./bcb/sgs.js";
 import { bcbFocusProvider } from "./bcb/focus.js";
+import { enforceFreshness } from "./freshness.js";
 import { fredProvider } from "./fred.js";
 import { usTreasuryProvider } from "./ustreasury.js";
 
@@ -55,7 +56,9 @@ export async function buildMarketSnapshot(input: BuildSnapshotInput): Promise<Ma
     secrets: input.secrets,
   };
   const batches = await Promise.all(providers.map((p) => p.fetch(ctx)));
-  const points = mergePoints(batches);
+  // Frescor ANTES do merge: um OK velho não pode ganhar de um ND só por chegar primeiro.
+  // Depois do gate ele já é ND, e a disputa passa a ser entre iguais.
+  const points = mergePoints(batches.map((b) => enforceFreshness(b, input.tradeDate)));
   if (points.length === 0) {
     throw new Error("snapshot vazio: nenhum provider retornou pontos");
   }

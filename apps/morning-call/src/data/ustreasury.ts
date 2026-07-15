@@ -1,6 +1,6 @@
 /**
  * U.S. Treasury par yield — feed XML oficial (sem chave).
- * Parse mínimo dos campos BC_2YEAR / BC_10YEAR / BC_30YEAR do dia mais recente no XML.
+ * Parse dos campos BC_2YEAR / BC_10YEAR / BC_30YEAR do pregão mais recente do feed.
  * Se o parse falhar → ND (FRED já cobre o mesmo dado com key).
  */
 import type { DataPoint } from "../schemas/data.js";
@@ -13,28 +13,55 @@ function extractTag(xml: string, tag: string): string | null {
   return m?.[1]?.trim() || null;
 }
 
-/** Pega o primeiro DailyTreasuryYieldCurveRateData block. */
-export function parseTreasuryXml(xml: string): {
+export interface TreasuryRow {
   date: string;
   y2: number;
   y10: number;
   y30: number;
-} | null {
+}
+
+/** Um <m:properties> por pregão. Feed sem blocos → o XML inteiro vira bloco único. */
+function propertyBlocks(xml: string): string[] {
+  return xml.match(/<m:properties>[\s\S]*?<\/m:properties>/gi) ?? [];
+}
+
+function parseBlock(block: string): TreasuryRow | null {
   const date =
-    extractTag(xml, "d:NEW_DATE") ??
-    extractTag(xml, "NEW_DATE") ??
-    extractTag(xml, "d:Date") ??
+    extractTag(block, "d:NEW_DATE") ??
+    extractTag(block, "NEW_DATE") ??
+    extractTag(block, "d:Date") ??
     null;
-  const y2s = extractTag(xml, "d:BC_2YEAR") ?? extractTag(xml, "BC_2YEAR");
-  const y10s = extractTag(xml, "d:BC_10YEAR") ?? extractTag(xml, "BC_10YEAR");
-  const y30s = extractTag(xml, "d:BC_30YEAR") ?? extractTag(xml, "BC_30YEAR");
+  const y2s = extractTag(block, "d:BC_2YEAR") ?? extractTag(block, "BC_2YEAR");
+  const y10s = extractTag(block, "d:BC_10YEAR") ?? extractTag(block, "BC_10YEAR");
+  const y30s = extractTag(block, "d:BC_30YEAR") ?? extractTag(block, "BC_30YEAR");
   if (!date || !y2s || !y10s || !y30s) return null;
   const y2 = Number(y2s);
   const y10 = Number(y10s);
   const y30 = Number(y30s);
   if (![y2, y10, y30].every(Number.isFinite)) return null;
-  const day = date.slice(0, 10);
-  return { date: day, y2, y10, y30 };
+  return { date: date.slice(0, 10), y2, y10, y30 };
+}
+
+/**
+ * Escolhe o pregão mais recente do feed, por DATA e não por posição.
+ *
+ * O feed do Treasury é ascendente: o primeiro bloco é 2 de janeiro. A versão anterior desta
+ * função rodava `xml.match()` sobre o documento inteiro, que casa a PRIMEIRA ocorrência — e
+ * publicava o rendimento de janeiro como se fosse o de hoje, com `status: OK` e `tier: 1`.
+ * Verificado no feed real de 2026-07-15: 2Y de 3,47 (02/01) no lugar de 4,18 (14/07), 71 bps de
+ * erro. Ordenar por data em vez de confiar na ordem também sobrevive a uma inversão do feed.
+ *
+ * `maxDate` (o pregão de referência) barra dado posterior: sem ele um replay histórico leria o
+ * futuro e o placar do Portão 1 mentiria a favor (CLAUDE.md §3, look-ahead bias).
+ */
+export function parseTreasuryXml(xml: string, maxDate?: string): TreasuryRow | null {
+  const blocks = propertyBlocks(xml);
+  const rows = (blocks.length > 0 ? blocks : [xml])
+    .map(parseBlock)
+    .filter((r): r is TreasuryRow => r !== null)
+    .filter((r) => (maxDate ? r.date <= maxDate : true));
+  if (rows.length === 0) return null;
+  return rows.reduce((mais, r) => (r.date > mais.date ? r : mais));
 }
 
 function nd(key: string, reason: string, observedAt: string): DataPoint {
@@ -57,7 +84,7 @@ export const usTreasuryProvider: DataProvider = {
         );
       }
       const xml = await res.text();
-      const parsed = parseTreasuryXml(xml);
+      const parsed = parseTreasuryXml(xml, ctx.tradeDate);
       if (!parsed) {
         return [SNAPSHOT_KEYS.UST_2Y, SNAPSHOT_KEYS.UST_10Y, SNAPSHOT_KEYS.UST_30Y].map((k) =>
           nd(k, "UST XML: parse falhou", ctx.observedAt),

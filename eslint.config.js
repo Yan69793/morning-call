@@ -29,10 +29,14 @@ export default tseslint.config(
   },
   {
     ignores: [
-      "dist/",
-      ".wrangler/",
-      "node_modules/",
-      "coverage/",
+      // `**/` é obrigatório num monorepo: o padrão `.wrangler/` só casa a raiz, e os artefatos
+      // que o `wrangler dev` gera ficam em `apps/*/.wrangler/tmp/`. Sem isto o lint quebra com
+      // "not found by the project service" em bundle gerado — erro que não é código de ninguém,
+      // e que só aparece depois que alguém roda o dev server.
+      "**/dist/",
+      "**/.wrangler/",
+      "**/node_modules/",
+      "**/coverage/",
       "eslint.config.js",
       // O Radar Quant é produto próprio e traz o seu próprio tooling (o frontend tem
       // `eslint.config.js`, e o worker roda `tsc --noEmit` como análise estática, por decisão
