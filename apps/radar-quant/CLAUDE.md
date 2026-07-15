@@ -11,8 +11,22 @@
 ## 2. Pilha Tecnológica e Comandos Locais (Especificidade do Repositório)
 *   **Ambiente de Execução:** Cloudflare Workers (Hono) + Node.js (scripts via tsx)
 *   **Linguagem:** TypeScript Strict
-*   **Comando de Validação (Testes):** `vitest run` (executar em `dashboard/worker`)
+*   **Comando de Validação (Testes):** `npm test -w @sz/radar-quant-worker` (da raiz do monorepo)
 *   **Comando de Análise Estática (Linter):** `tsc --noEmit` (typecheck — não há linter dedicado configurado)
+
+> **Este projeto agora vive num monorepo** (`ARCHITECTURE.md` AD-8 na raiz). Mudou o seguinte:
+> - `dashboard/worker` → `apps/radar-quant/worker`; `dashboard/frontend` → `apps/radar-quant/frontend`.
+> - `dashboard/shared` → **`packages/analytics`** (`@sz/analytics`), compartilhado com o Morning Call.
+> - `scripts/type-sync.ps1` **foi removido**: existia para conferir se `shared/types.ts`,
+>   `worker/src/types.ts` e `frontend/src/types/index.ts` continuavam iguais, e só sabia detectar a
+>   divergência depois que ela acontecia. Hoje há um tipo só, em `@sz/analytics`, e os outros dois
+>   arquivos são re-export. Não há o que sincronizar.
+> - O lint e o Prettier da raiz **não** alcançam este app: ele mantém a convenção própria.
+>
+> **Validar após mudança** (da raiz): `npm test` e `npm run typecheck`. Para o ensaio de deploy:
+> `npx wrangler deploy --dry-run --config ./wrangler.toml` de dentro de `worker/` — o `--config` é
+> obrigatório no Windows, senão o wrangler procura o entry-point um nível acima e falha. Isso não é
+> efeito do monorepo: acontece igual na árvore antiga.
 
 ---
 
