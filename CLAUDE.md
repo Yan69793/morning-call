@@ -4,7 +4,7 @@
 > Gemini CLI, ZCode). Leia-o inteiro antes de tocar em qualquer arquivo. As regras aqui são
 > absolutas e prevalecem sobre conveniência, velocidade ou "boas práticas genéricas".
 >
-> Documentos irmãos: `AGENTS.md` (agentes de runtime), `ARCHITECTURE.md` (arquitetura decidida),
+> Documentos irmãos: `docs/RUNTIME_AGENTS.md` (agentes de runtime), `ARCHITECTURE.md` (arquitetura decidida),
 > `IMPLEMENTATION_PLAN.md` (fases), `MORNING_CALL_OTIMIZADO.md` (contrato editorial),
 > `docs/DATA_SOURCES.md` (o gargalo real).
 
@@ -53,6 +53,7 @@ Decisão registrada em `ARCHITECTURE.md`. Resumo:
 ## 3. REGRAS ABSOLUTAS
 
 **Dados e verdade**
+
 - Nunca invente cotações, fontes, endpoints, credenciais, consensos, fluxos, suportes,
   resistências, spreads, posições ou probabilidades.
 - **Todo cálculo financeiro relevante é feito por código testado.** LLMs interpretam números,
@@ -63,12 +64,14 @@ Decisão registrada em `ARCHITECTURE.md`. Resumo:
   dados reais fora dos testes.
 
 **IA e agentes**
+
 - Cada etapa produz **saída estruturada validada** (schema em `src/schemas`). Sem JSON válido,
   a etapa falha — não improvisa.
 - O sistema continua funcionando com um provedor de IA fora do ar (retry, timeout, fallback).
 - Evite dependência de um único provedor. Custo por modelo é monitorado e registrado.
 
 **Segurança e operação**
+
 - Nunca exponha chaves. Segredos vão em `.dev.vars` (local) / secrets do Wrangler (prod),
   nunca no código nem em logs.
 - Nunca faça deploy automático. Deploy é ação humana explícita.
@@ -77,6 +80,7 @@ Decisão registrada em `ARCHITECTURE.md`. Resumo:
 - Degrade com segurança: falha parcial gera relatório com seções `N/D`, não um relatório falso.
 
 **Financeiro**
+
 - Proibido código que execute ordem, transferência ou qualquer ação de capital.
 - Cuidado com: timezone/feriados de mercado, arredondamento, unidades, %, bps, look-ahead bias,
   survivorship bias, mistura de dado observado com estimado.
@@ -85,7 +89,7 @@ Decisão registrada em `ARCHITECTURE.md`. Resumo:
 
 ## 4. FLUXO DE TRABALHO DO AGENTE DE CÓDIGO
 
-1. **Diagnostique antes de codar.** Inspecione o repo, leia este arquivo, `AGENTS.md`,
+1. **Diagnostique antes de codar.** Inspecione o repo, leia este arquivo, `docs/RUNTIME_AGENTS.md`,
    `ARCHITECTURE.md` e `MORNING_CALL_OTIMIZADO.md`. Não crie dezenas de arquivos de cara.
 2. **Trabalhe uma fase por vez** (ver `IMPLEMENTATION_PLAN.md`). Antes de cada fase declare:
    objetivo, arquivos afetados, dependências, critério de conclusão, testes necessários.

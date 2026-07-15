@@ -9,16 +9,27 @@
     "deploy": "wrangler deploy",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "eslint src tests",
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20240000.0",
-    "typescript": "^5.5.0",
-    "vitest": "^2.0.0",
-    "wrangler": "^3.60.0"
+    "@cloudflare/workers-types": "^5.20260715.1",
+    "@eslint/js": "^10.0.1",
+    "@vitest/coverage-v8": "^4.1.10",
+    "eslint": "^10.7.0",
+    "prettier": "^3.9.5",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.64.0",
+    "vitest": "^4.1.10",
+    "wrangler": "^4.111.0"
   },
   "dependencies": {
-    "zod": "^3.23.0"
+    "zod": "^4.4.3"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }

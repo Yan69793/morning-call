@@ -5,15 +5,22 @@ main = "src/index.ts"
 compatibility_date = "2026-07-01"
 compatibility_flags = ["nodejs_compat"]
 
-# Cron 06:30 BRT = 09:30 UTC (BRT = UTC-3). Ajustar se houver horário de verão.
+# Cron em UTC. BRT é UTC-3 fixo (o Brasil não observa horário de verão desde 2019).
+#   "30 9  * * 1-5" = 06:30 BRT, geração do Morning Call.
+#   "30 21 * * 1-5" = 18:30 BRT, marcação a mercado dos trades abertos.
+# O cron não conhece feriado de B3 nem de NYSE: o calendário é checado em código, no primeiro
+# step do workflow, que aborta cedo em dia sem pregão.
 [triggers]
-crons = ["30 9 * * 1-5"]
+crons = ["30 9 * * 1-5", "30 21 * * 1-5"]
 
-# --- Bindings (preencher após criar os recursos) ---
-# [[d1_databases]]
-# binding = "DB"
-# database_name = "morning-call"
-# database_id = "TODO"
+# --- Bindings ---
+# `database_id` é placeholder: `--local` ignora, mas o binding precisa existir para as migrations
+# rodarem contra o SQLite local. Trocar pelo ID real de `wrangler d1 create morning-call`.
+[[d1_databases]]
+binding = "DB"
+database_name = "morning-call"
+database_id = "TODO_wrangler_d1_create"
+migrations_dir = "migrations"
 
 # [[kv_namespaces]]
 # binding = "CACHE"
