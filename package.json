@@ -1,33 +1,27 @@
 {
-  "name": "morning-call",
+  "name": "sz-market-intelligence",
   "version": "0.0.1",
   "private": true,
-  "description": "Sistema de Morning Call multimercados (Cloudflare Worker)",
+  "description": "Monorepo: Morning Call (brief macro) + Radar Quant Brasil (radar técnico), sobre um núcleo analítico compartilhado",
   "type": "module",
+  "workspaces": [
+    "apps/morning-call"
+  ],
   "scripts": {
-    "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage",
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "format:check": "prettier --check .",
-    "typecheck": "tsc --noEmit"
+    "format:check": "prettier --check ."
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^5.20260715.1",
     "@eslint/js": "^10.0.1",
     "@vitest/coverage-v8": "^4.1.10",
     "eslint": "^10.7.0",
     "prettier": "^3.9.5",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.64.0",
-    "vitest": "^4.1.10",
-    "wrangler": "^4.111.0"
-  },
-  "dependencies": {
-    "zod": "^4.4.3"
+    "vitest": "^4.1.10"
   },
   "engines": {
     "node": ">=22"

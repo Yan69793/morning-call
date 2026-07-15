@@ -1,0 +1,22 @@
+{
+  "name": "@sz/morning-call",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Morning Call multimercados: brief macro rastreável (Cloudflare Worker)",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260715.1",
+    "wrangler": "^4.111.0"
+  }
+}

@@ -123,17 +123,39 @@ npx wrangler deploy    # SOMENTE com autorização humana
 
 ## 7. ESTRUTURA DE DIRETÓRIOS
 
+**Este repositório é um monorepo npm workspaces** (ver `ARCHITECTURE.md` AD-8). O código do
+Morning Call **não** fica mais na raiz: mudou para `apps/morning-call/`.
+
 ```
-src/
-  index.ts          # entry do Worker: cron + fetch
-  orchestrator/     # supervisor hierárquico (fan-out/fan-in, máx. 2 rodadas)
-  data/             # conectores determinísticos (BCB, B3, ANBIMA, Tesouro, FRED, CME...)
-  quant/            # motor quantitativo (funções puras, 100% testadas)
-  agents/           # research, macro, brasil, técnico, crédito, trade, redteam, validação, editor
-  schemas/          # contratos de I/O (a fonte de verdade dos tipos)
-  committee/        # scoring do comitê de investimento
-  report/           # montagem do Morning Call final
-prompts/            # prompts por agente (fatiados do MORNING_CALL_OTIMIZADO)
-tests/              # unit + integração (com fixtures/mocks marcados)
-docs/               # DATA_SOURCES.md, COST_ESTIMATE.md, etc.
+apps/
+  morning-call/       # o Morning Call (Cloudflare Worker)
+    src/
+      index.ts        # entry do Worker: cron + fetch
+      orchestrator/   # pipeline em steps (fan-out/fan-in, máx. 2 rodadas)
+      data/           # conectores determinísticos (BCB, FRED, U.S. Treasury...)
+      quant/          # motor quantitativo (funções puras, testadas)
+      agents/         # research, strategist, redteam, editor (v1 = 4 agentes)
+      schemas/        # contratos de I/O (a fonte de verdade dos tipos)
+      committee/      # gates + crossCheck (código, sem LLM)
+      report/         # montagem do Morning Call, marcação a mercado, placar
+    prompts/          # prompts por agente (fatiados do MORNING_CALL_OTIMIZADO)
+    tests/            # unit + integração (com fixtures/mocks marcados)
+    migrations/       # schema D1 (histórico e avaliação)
+    wrangler.toml
+  radar-quant/        # Radar Quant Brasil: radar técnico BR (produto próprio, deploy próprio)
+    worker/           # API (Hono) — D1 `radar-quant`, KV
+    frontend/         # dashboard (React + Vite)
+    scripts/          # generate-scan, push-signal (pipeline TradingView → ingest)
+    pine/             # indicadores Pine Script
+packages/
+  analytics/          # núcleo analítico compartilhado (funções puras, sem I/O)
+docs/                 # DATA_SOURCES.md, RUNTIME_AGENTS.md, COST_ESTIMATE.md
 ```
+
+**Comandos rodam da raiz** e atravessam os workspaces: `npm test`, `npm run typecheck`,
+`npm run lint`. Para um app só: `npm test -w @sz/morning-call`.
+
+`packages/analytics` é a fonte única de `Quality`, `Metrics`, `computeMetrics`, `qualityFlags` e
+`computeScore`. Antes de escrever cálculo de retorno, vol ou flag de qualidade no Morning Call,
+**veja se já existe lá** — é código em produção no Radar Quant, testado, e com a disciplina certa
+(dado ausente é `null`, nunca `0`; peso ausente é renormalizado, não zerado).
