@@ -1,0 +1,8 @@
+# Copie para .dev.vars (NÃO versionar). Em produção, use `wrangler secret put`.
+OPENROUTER_API_KEY=""
+# Opcionais, se for usar chaves diretas em vez do OpenRouter:
+# OPENAI_API_KEY=""
+# ANTHROPIC_API_KEY=""
+# GOOGLE_API_KEY=""
+# Provedores de dados (preencher conforme docs/DATA_SOURCES.md):
+# FRED_API_KEY=""

@@ -1,0 +1,27 @@
+# TEMPLATE — preencher IDs reais com `wrangler d1 create`, `wrangler kv namespace create`,
+# `wrangler r2 bucket create`. NÃO commitar IDs sensíveis se o repo for público.
+name = "morning-call"
+main = "src/index.ts"
+compatibility_date = "2026-07-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Cron 06:30 BRT = 09:30 UTC (BRT = UTC-3). Ajustar se houver horário de verão.
+[triggers]
+crons = ["30 9 * * 1-5"]
+
+# --- Bindings (preencher após criar os recursos) ---
+# [[d1_databases]]
+# binding = "DB"
+# database_name = "morning-call"
+# database_id = "TODO"
+
+# [[kv_namespaces]]
+# binding = "CACHE"
+# id = "TODO"
+
+# [[r2_buckets]]
+# binding = "REPORTS"
+# bucket_name = "morning-call-reports"
+
+# [ai]
+# binding = "AI"   # Workers AI (Kimi K2.6 e outros)
