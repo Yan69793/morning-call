@@ -26,19 +26,11 @@
     },
     "horizonte": {
       "type": "string",
-      "enum": [
-        "intraday",
-        "swing",
-        "tatico_1_3m",
-        "estrategico_6_12m"
-      ]
+      "enum": ["intraday", "swing", "tatico_1_3m", "estrategico_6_12m"]
     },
     "direcao": {
       "type": "string",
-      "enum": [
-        "comprar",
-        "vender"
-      ]
+      "enum": ["comprar", "vender"]
     },
     "entrada": {
       "oneOf": [
@@ -73,10 +65,7 @@
                   ]
                 }
               },
-              "required": [
-                "value",
-                "unit"
-              ]
+              "required": ["value", "unit"]
             },
             "faixa": {
               "type": "object",
@@ -101,10 +90,7 @@
                       ]
                     }
                   },
-                  "required": [
-                    "value",
-                    "unit"
-                  ]
+                  "required": ["value", "unit"]
                 },
                 "max": {
                   "type": "object",
@@ -126,24 +112,13 @@
                       ]
                     }
                   },
-                  "required": [
-                    "value",
-                    "unit"
-                  ]
+                  "required": ["value", "unit"]
                 }
               },
-              "required": [
-                "min",
-                "max"
-              ]
+              "required": ["min", "max"]
             }
           },
-          "required": [
-            "tipo",
-            "instrumento",
-            "nivel",
-            "faixa"
-          ]
+          "required": ["tipo", "instrumento", "nivel", "faixa"]
         },
         {
           "type": "object",
@@ -172,10 +147,7 @@
                   ]
                 }
               },
-              "required": [
-                "value",
-                "unit"
-              ]
+              "required": ["value", "unit"]
             },
             "faixa": {
               "type": "object",
@@ -200,10 +172,7 @@
                       ]
                     }
                   },
-                  "required": [
-                    "value",
-                    "unit"
-                  ]
+                  "required": ["value", "unit"]
                 },
                 "max": {
                   "type": "object",
@@ -225,16 +194,10 @@
                       ]
                     }
                   },
-                  "required": [
-                    "value",
-                    "unit"
-                  ]
+                  "required": ["value", "unit"]
                 }
               },
-              "required": [
-                "min",
-                "max"
-              ]
+              "required": ["min", "max"]
             },
             "pernas": {
               "minItems": 2,
@@ -248,30 +211,18 @@
                   },
                   "lado": {
                     "type": "string",
-                    "enum": [
-                      "long",
-                      "short"
-                    ]
+                    "enum": ["long", "short"]
                   },
                   "peso": {
                     "type": "number",
                     "exclusiveMinimum": 0
                   }
                 },
-                "required": [
-                  "instrumento",
-                  "lado",
-                  "peso"
-                ]
+                "required": ["instrumento", "lado", "peso"]
               }
             }
           },
-          "required": [
-            "tipo",
-            "nivel",
-            "faixa",
-            "pernas"
-          ]
+          "required": ["tipo", "nivel", "faixa", "pernas"]
         },
         {
           "type": "object",
@@ -300,10 +251,7 @@
                   ]
                 }
               },
-              "required": [
-                "value",
-                "unit"
-              ]
+              "required": ["value", "unit"]
             },
             "faixa": {
               "type": "object",
@@ -328,10 +276,7 @@
                       ]
                     }
                   },
-                  "required": [
-                    "value",
-                    "unit"
-                  ]
+                  "required": ["value", "unit"]
                 },
                 "max": {
                   "type": "object",
@@ -353,16 +298,10 @@
                       ]
                     }
                   },
-                  "required": [
-                    "value",
-                    "unit"
-                  ]
+                  "required": ["value", "unit"]
                 }
               },
-              "required": [
-                "min",
-                "max"
-              ]
+              "required": ["min", "max"]
             },
             "pernas": {
               "minItems": 1,
@@ -376,17 +315,11 @@
                   },
                   "lado": {
                     "type": "string",
-                    "enum": [
-                      "long",
-                      "short"
-                    ]
+                    "enum": ["long", "short"]
                   },
                   "tipo": {
                     "type": "string",
-                    "enum": [
-                      "call",
-                      "put"
-                    ]
+                    "enum": ["call", "put"]
                   },
                   "strike": {
                     "type": "object",
@@ -408,10 +341,7 @@
                         ]
                       }
                     },
-                    "required": [
-                      "value",
-                      "unit"
-                    ]
+                    "required": ["value", "unit"]
                   },
                   "vencimento": {
                     "type": "string",
@@ -423,23 +353,11 @@
                     "exclusiveMinimum": 0
                   }
                 },
-                "required": [
-                  "instrumento",
-                  "lado",
-                  "tipo",
-                  "strike",
-                  "vencimento",
-                  "peso"
-                ]
+                "required": ["instrumento", "lado", "tipo", "strike", "vencimento", "peso"]
               }
             }
           },
-          "required": [
-            "tipo",
-            "nivel",
-            "faixa",
-            "pernas"
-          ]
+          "required": ["tipo", "nivel", "faixa", "pernas"]
         }
       ]
     },
@@ -451,22 +369,10 @@
         },
         "unit": {
           "type": "string",
-          "enum": [
-            "BRL",
-            "USD",
-            "BRL_por_USD",
-            "pct",
-            "bps",
-            "index_points",
-            "ratio",
-            "contratos"
-          ]
+          "enum": ["BRL", "USD", "BRL_por_USD", "pct", "bps", "index_points", "ratio", "contratos"]
         }
       },
-      "required": [
-        "value",
-        "unit"
-      ]
+      "required": ["value", "unit"]
     },
     "alvo_2": {
       "type": "object",
@@ -476,22 +382,10 @@
         },
         "unit": {
           "type": "string",
-          "enum": [
-            "BRL",
-            "USD",
-            "BRL_por_USD",
-            "pct",
-            "bps",
-            "index_points",
-            "ratio",
-            "contratos"
-          ]
+          "enum": ["BRL", "USD", "BRL_por_USD", "pct", "bps", "index_points", "ratio", "contratos"]
         }
       },
-      "required": [
-        "value",
-        "unit"
-      ]
+      "required": ["value", "unit"]
     },
     "invalidacao": {
       "type": "object",
@@ -522,10 +416,7 @@
                   ]
                 }
               },
-              "required": [
-                "value",
-                "unit"
-              ]
+              "required": ["value", "unit"]
             },
             {
               "type": "null"
@@ -533,10 +424,7 @@
           ]
         }
       },
-      "required": [
-        "descricao",
-        "nivel"
-      ]
+      "required": ["descricao", "nivel"]
     },
     "tese": {
       "type": "string",
@@ -582,22 +470,10 @@
         },
         "unit": {
           "type": "string",
-          "enum": [
-            "BRL",
-            "USD",
-            "BRL_por_USD",
-            "pct",
-            "bps",
-            "index_points",
-            "ratio",
-            "contratos"
-          ]
+          "enum": ["BRL", "USD", "BRL_por_USD", "pct", "bps", "index_points", "ratio", "contratos"]
         }
       },
-      "required": [
-        "value",
-        "unit"
-      ]
+      "required": ["value", "unit"]
     },
     "perda_maxima": {
       "type": "object",
@@ -607,22 +483,10 @@
         },
         "unit": {
           "type": "string",
-          "enum": [
-            "BRL",
-            "USD",
-            "BRL_por_USD",
-            "pct",
-            "bps",
-            "index_points",
-            "ratio",
-            "contratos"
-          ]
+          "enum": ["BRL", "USD", "BRL_por_USD", "pct", "bps", "index_points", "ratio", "contratos"]
         }
       },
-      "required": [
-        "value",
-        "unit"
-      ]
+      "required": ["value", "unit"]
     },
     "sizing_pct_orcamento_risco": {
       "type": "number",
