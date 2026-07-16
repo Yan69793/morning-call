@@ -25,7 +25,7 @@ teses você raciocine sabendo o que é fato coletado e o que é inferência de m
 | Parâmetro                       | Opções                                       | Proposta (confirmar)                                                                                                                                                                                                    |
 | ------------------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **P1. Natureza**                | (a) Máquina de calls. (b) Brief situacional. | **TRAVADO: (a) máquina de calls** (usuário, 15/07/2026). Consequência: o kill é sobre **alfa** (não utilidade); o `TradeCardDraft` completo se justifica (não é peso morto); o teste tem de ser **forward/pós-cutoff**. |
-| **P2. Barra de sucesso / kill** | O critério que te faria abandonar.           | Proposta de dois estágios em §6 (smoke test + prova de borda por MinTRL). Ajustar N.                                                                                                                                    |
+| **P2. Barra de sucesso / kill** | O critério que te faria abandonar.           | **TRAVADO** (16/07): dois estágios (§6). Smoke = 25 pregões. Prova = **N = 100 trades** marcados, batendo B&H e null na média **e** em sharpe. No código: `PROVA_N_TRADES` + `promocao_autorizada`.                     |
 | **P3. Classes cobertas**        | Quais mercados.                              | **TRAVADO** (15/07): juros BR (NTN-B, DI, Focus, Copom), câmbio, crédito privado/debêntures, macro+geopolítica, cripto/metais, e **renda variável (ações)**.                                                            |
 
 **Por que P1 é a bifurcação real.** [CERTO] ela decide o que o Portão 1 mede e o que é
@@ -182,15 +182,28 @@ alucinação" é promessa, não mecanismo.
 macro+geopolítica, cripto/metais, renda variável. Cross-check da §4 implementado e testado
 (`src/committee/crossCheck.ts` + `QuantClaim`, 10 testes verdes).
 
+**Travado (16/07/2026) — P2, o kill pré-registrado de (a), em dois estágios:**
+
+1. _Smoke test_, **25 pregões** (`DEFAULT_SMOKE_N`): se o modelo único estiver obviamente perdendo
+   para buy-and-hold **e** para o null, mata cedo. Barato e binário. Não prova borda.
+2. _Prova de borda_, **N = 100 trades marcados** (`PROVA_N_TRADES`). Ordem de grandeza acima do
+   smoke, e o mínimo defensável em prática de quant para ter leitura de hit rate e Sharpe antes de
+   escalar capital real. **Não** é o N que MinTRL / Deflated Sharpe exigiriam para significância
+   formal corrigida por multiple-testing — esse depende do Sharpe observado e do número de ideias
+   testadas, e para Sharpe baixo passa de mil observações. 100 é o limiar operacional para parar de
+   ser fumaça e permitir decisão sob incerteza, dita em voz alta. Contado em trades, não pregões:
+   dia sem trade não testa a tese.
+3. **"Bater"**: superar B&H **e** o null na média diária **e** `model_sharpe > bh_sharpe`.
+
+O número está no código, não só aqui: `promocao_autorizada` no `scoreboard.ts` só é `true` com
+sinal **e** `n_trades >= 100`, e enquanto for `false` o Portão 3 não está autorizado. Sem isso,
+`sinal_candidato` era alcançável com 25 pregões e lia-se como aprovação — o kill tinha número para
+começar e nenhum para terminar.
+
 **Pendente:**
 
-1. **Runtime do Portão 1** — script 1x/dia (SQLite) vs. Worker desde já. [PROVÁVEL] script chega ao
-   kill antes e o `quant.py` já serve; o experimento não deveria pagar o imposto da arquitetura
-   final. É a última trava antes do plano de execução.
-2. **P2 — kill pré-registrado de (a), dois estágios.** (i) _Smoke test_, ~20-30 pregões: se o modelo
-   único estiver obviamente perdendo para buy-and-hold **e** para o null, mata cedo. (ii) _Prova de
-   borda_, N ≫ 30 (MinTRL, corrigido por multiple-testing): só então "bater o consenso" significa
-   algo. Ajustar N e a definição de "bater".
+1. **Runtime do Portão 1** — resolvido por física, como o §"PC-2" previu: o Worker roda TypeScript,
+   e o `quant.py` virou golden test. Fica registrado como fechado, não como escolha em aberto.
 
 Com o runtime travado, escrevo o plano de execução granular (`writing-plans.md`), tarefa a tarefa,
 para o ramo (a). O teste do Portão 1 roda **forward** (paper-trade daqui para frente), não em

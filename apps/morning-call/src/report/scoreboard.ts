@@ -56,12 +56,49 @@ export interface Scoreboard {
 
   leitura: Leitura;
   smoke_n: number;
+  /** Trades marcados exigidos para a leitura poder sustentar promoção. Ver `PROVA_N_TRADES`. */
+  prova_n: number;
+
+  /**
+   * O gate do Portão 1, e a única saída deste módulo que autoriza alguma coisa.
+   *
+   * `leitura: "sinal_candidato"` diz que o modelo bateu os baselines na amostra que existe — o
+   * que, com 25 pregões, é exatamente o que o PLANO_ESTRATEGICO §6 manda NÃO chamar de borda.
+   * Sem este campo, "sinal_candidato" era alcançável no smoke test e lia-se como aprovação:
+   * o kill tinha um número para começar (25) e nenhum para terminar.
+   *
+   * Só é `true` com leitura de sinal E `n_trades >= prova_n`. Enquanto for `false`, o build
+   * multi-agente do Portão 3 não está autorizado e capital real não escala.
+   */
+  promocao_autorizada: boolean;
   /** Limitações que viajam junto com o número, em vez de morrer num comentário de código. */
   notas: string[];
 }
 
 /** Pregões mínimos para a leitura deixar de ser fumaça. Ver nota sobre poder estatístico. */
 const DEFAULT_SMOKE_N = 25;
+
+/**
+ * N do kill do Portão 1: 100 trades marcados. DECISÃO REGISTRADA em 2026-07-16 pelo operador.
+ *
+ * Fecha o "ajustar N" que os três planos carregavam desde 15/07. Enquanto era "N ≫ 30", o número
+ * não existia — e kill sem número não é kill pré-registrado, é intenção. O ônus de escrever N
+ * ANTES de rodar é justamente não poder escolhê-lo depois de ver o resultado.
+ *
+ * Por que 100, e o que 100 não é:
+ * - É uma ordem de grandeza acima do smoke test (20–30), que só detecta "obviamente quebrado".
+ * - É o mínimo defensável em prática de quant para ter alguma leitura de hit rate e Sharpe antes
+ *   de escalar capital real.
+ * - NÃO é o N que a literatura (MinTRL / Deflated Sharpe, Bailey & López de Prado 2014) exigiria
+ *   para significância formal corrigida por multiple-testing: esse N depende do Sharpe observado
+ *   e da quantidade de ideias testadas, e para Sharpe baixo passa de mil observações. 100 é o
+ *   limiar operacional para PARAR DE SER FUMAÇA e permitir uma decisão sob incerteza — dita em
+ *   voz alta, que é o que o PLANO_ESTRATEGICO §6 pede.
+ *
+ * Contado em TRADES marcados, não em pregões: um dia sem trade não testa a tese do modelo, e o
+ * placar já separa `n_days` de `n_trades` exatamente por isso.
+ */
+export const PROVA_N_TRADES = 100;
 
 function mean(xs: readonly number[]): number {
   return xs.length === 0 ? 0 : xs.reduce((a, x) => a + x, 0) / xs.length;
@@ -118,6 +155,7 @@ export function buildScoreboard(
   outcomes: readonly TradeOutcome[],
   baselines: readonly BaselineDay[],
   smokeN = DEFAULT_SMOKE_N,
+  provaN = PROVA_N_TRADES,
 ): Scoreboard {
   const n_trades = outcomes.length;
   const n_days = baselines.length;
@@ -196,6 +234,16 @@ export function buildScoreboard(
     leitura = "fumaca";
   }
 
+  // Gate do kill: bater os baselines na amostra que existe não é o mesmo que ter amostra. Um
+  // "sinal_candidato" com 30 trades é uma observação interessante, não uma licença para escalar.
+  const promocao_autorizada = leitura === "sinal_candidato" && n_trades >= provaN;
+  if (leitura === "sinal_candidato" && !promocao_autorizada) {
+    notas.push(
+      `sinal candidato com ${n_trades} trade(s) < ${provaN} do kill pré-registrado: NÃO autoriza ` +
+        "promoção nem capital. Diferença entre bater os baselines e ter amostra para afirmar isso.",
+    );
+  }
+
   return {
     n_trades,
     n_days,
@@ -209,6 +257,8 @@ export function buildScoreboard(
     focus_coverage_days: focusDays.length,
     leitura,
     smoke_n: smokeN,
+    prova_n: provaN,
+    promocao_autorizada,
     notas,
   };
 }

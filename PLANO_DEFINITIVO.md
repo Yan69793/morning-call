@@ -9,7 +9,8 @@
 - P1 = máquina de calls (alfa forward)
 - Runtime = Worker TS; `quant.py` = golden only
 - Snapshot-first → closed-book → QuantClaim → crossCheck → N/D → Traceability
-- Kill smoke ~20–30 pregões; prova N ≫ 30 (MinTRL)
+- Kill: smoke 25 pregões (`DEFAULT_SMOKE_N`); **prova N = 100 trades** (`PROVA_N_TRADES`, travado
+  16/07). Abaixo de 100, `promocao_autorizada = false` — não escala nem promove ao Portão 3
 - Deploy sempre humano; proibido executar ordens
 
 ## Estado

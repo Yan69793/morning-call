@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildScoreboard,
   modelDailySeries,
+  PROVA_N_TRADES,
   type BaselineDay,
   type TradeOutcome,
 } from "../../src/report/scoreboard.js";
@@ -128,5 +129,71 @@ describe("buildScoreboard: honestidade do placar", () => {
     const s = buildScoreboard([], bs, 25);
     expect(s.focus_mean_abs_error).toBeNull();
     expect(s.focus_coverage_days).toBe(0);
+  });
+});
+
+/**
+ * O kill do Portão 1 (N = 100 trades, decisão de 2026-07-16).
+ *
+ * Antes, `sinal_candidato` era alcançável no smoke test (25 pregões) e lia-se como aprovação: o
+ * kill tinha número para começar e nenhum para terminar. `promocao_autorizada` é o que separa
+ * "bateu os baselines na amostra que existe" de "tem amostra para afirmar isso".
+ */
+describe("gate do kill: N = 100 trades", () => {
+  /** Cenário em que o modelo bate os baselines em média E em sharpe, com N controlado. */
+  function cenarioVencedor(nDias: number): { outcomes: TradeOutcome[]; bs: BaselineDay[] } {
+    const bs: BaselineDay[] = dias(nDias).map((b, i) => ({
+      ...b,
+      bh_pct: i % 2 === 0 ? 0.002 : 0,
+    }));
+    const outcomes = bs.map((b, i) => tradeEm(b.trade_date, i % 2 === 0 ? 0.05 : 0.049));
+    return { outcomes, bs };
+  }
+
+  it("N = 100 é a constante registrada, não um número solto no meio da função", () => {
+    expect(PROVA_N_TRADES).toBe(100);
+  });
+
+  it("sinal_candidato abaixo de N NÃO autoriza promoção, e a nota diz por quê", () => {
+    const { outcomes, bs } = cenarioVencedor(30);
+    const s = buildScoreboard(outcomes, bs, 25);
+    expect(s.leitura).toBe("sinal_candidato"); // bateu os baselines...
+    expect(s.n_trades).toBe(30);
+    expect(s.promocao_autorizada).toBe(false); // ...mas 30 < 100
+    expect(s.notas.join(" ")).toContain("NÃO autoriza");
+    expect(s.prova_n).toBe(100);
+  });
+
+  it("sinal_candidato com N >= 100 autoriza, e a nota some", () => {
+    const { outcomes, bs } = cenarioVencedor(100);
+    const s = buildScoreboard(outcomes, bs, 25);
+    expect(s.leitura).toBe("sinal_candidato");
+    expect(s.n_trades).toBe(100);
+    expect(s.promocao_autorizada).toBe(true);
+    expect(s.notas.join(" ")).not.toContain("NÃO autoriza");
+  });
+
+  it("na fronteira: 99 trades não promove, 100 promove", () => {
+    const a = cenarioVencedor(99);
+    const b = cenarioVencedor(100);
+    expect(buildScoreboard(a.outcomes, a.bs, 25).promocao_autorizada).toBe(false);
+    expect(buildScoreboard(b.outcomes, b.bs, 25).promocao_autorizada).toBe(true);
+  });
+
+  it("N alto não salva modelo ruim: quebrado com 120 trades segue sem promoção", () => {
+    const bs = dias(120, 0.001);
+    const outcomes = bs.map((b) => tradeEm(b.trade_date, -0.02));
+    const s = buildScoreboard(outcomes, bs, 25);
+    expect(s.leitura).toBe("obviamente_quebrado");
+    expect(s.promocao_autorizada).toBe(false);
+  });
+
+  it("fumaça nunca promove, por mais trades que tenha", () => {
+    // Muitos trades, poucos pregões: n_days < smokeN manda na leitura.
+    const bs = dias(3);
+    const outcomes = Array.from({ length: 150 }, (_, i) => tradeEm(bs[i % 3]!.trade_date, 0.1, i));
+    const s = buildScoreboard(outcomes, bs, 25);
+    expect(s.leitura).toBe("fumaca");
+    expect(s.promocao_autorizada).toBe(false);
   });
 });

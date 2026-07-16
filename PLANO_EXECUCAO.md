@@ -14,13 +14,30 @@
 >
 > **Verificação em PowerShell** (Windows). Uma tarefa por vez; não avança sobre teste vermelho.
 
-## Kill pré-registrado (P2, ajustar N)
+## Kill pré-registrado (P2) — **TRAVADO: N = 100 trades** (16/07/2026)
 
 - **Smoke test (~20-30 pregões):** se o modelo único estiver obviamente perdendo para buy-and-hold
-  **e** para o null, mata cedo. Barato, binário.
-- **Prova de borda (N ≫ 30):** só com N suficiente (MinTRL, corrigido por multiple-testing —
-  cada ideia testada por dia é um trial) "bater o consenso/buy-and-hold ajustado a risco" significa
-  algo. Definir N e "bater" antes de rodar em produção.
+  **e** para o null, mata cedo. Barato, binário. No código: `DEFAULT_SMOKE_N = 25`.
+- **Prova de borda — N = 100 trades marcados.** Decisão do operador em 16/07, fechando o "ajustar
+  N" que este documento carregava. Enquanto era "N ≫ 30", o kill não tinha número, e kill sem
+  número não é pré-registrado: é intenção que se ajusta depois de ver o resultado.
+  - **Por que 100:** ordem de grandeza acima do smoke, e o mínimo defensável em prática de quant
+    para ter alguma leitura de hit rate e Sharpe antes de escalar capital real.
+  - **O que 100 não é:** o N que MinTRL / Deflated Sharpe exigiriam para significância formal
+    corrigida por multiple-testing — esse depende do Sharpe observado e do número de ideias
+    testadas, e para Sharpe baixo passa de mil observações. 100 é o limiar operacional para
+    **parar de ser fumaça** e permitir decisão sob incerteza, dita em voz alta (§6 do estratégico).
+  - **Contado em trades, não pregões:** dia sem trade não testa a tese. O placar já separa
+    `n_days` de `n_trades`.
+- **"Bater" (também travado):** superar buy-and-hold **e** o null na média diária **e** ter
+  `model_sharpe > bh_sharpe`. Ganhar na média com o triplo da vol é alavancagem, não borda.
+
+**Enforcement, não documentação:** `PROVA_N_TRADES = 100` em `src/report/scoreboard.ts`, e o
+placar expõe `promocao_autorizada`, que só é `true` com `leitura: "sinal_candidato"` **e**
+`n_trades >= 100`. Antes, `sinal_candidato` era alcançável no smoke test (25 pregões) e lia-se
+como aprovação — o kill tinha número para começar e nenhum para terminar. Enquanto
+`promocao_autorizada` for `false`, o Portão 3 (multi-agente) não está autorizado e capital real
+não escala.
 
 ---
 
