@@ -13,10 +13,12 @@ import {
   saveSnapshot,
   saveTrade,
 } from "../db/runs.js";
+import { JANELA_CORRELACAO, fetchSeriesBundle } from "../data/series.js";
 import { runStrategist } from "../agents/strategist.js";
 import { filterPublishableTrades, runGates } from "../committee/gates.js";
 import { buildMorningCall } from "../report/build.js";
 import { validateMorningCall } from "../report/validate.js";
+import { buildQuantMetrics } from "../quant/build.js";
 import { extractDayBaselines } from "../quant/baselines.js";
 import { buildMacroSummary } from "../report/sumario.js";
 import type { QuantMetrics } from "../schemas/quant.js";
@@ -81,16 +83,22 @@ export async function runMorningCall(opts: RunOptions): Promise<RunResult> {
     await saveSnapshot(opts.env.DB, snapshot);
   }
 
-  // [2] quant metrics mínimo (vazio de séries longas no P1 se só levels)
-  const metrics: QuantMetrics = {
-    run_id: runId,
-    trade_date: tradeDate,
-    ativos: [],
-    curvas: [],
-    correlacoes_63d: [],
-    inflacao_implicita: [],
-    faltantes,
-  };
+  // [2] quant sobre séries históricas: sem elas o motor fica escrito e desligado, e o gate de
+  // correlação (MAX_RHO) opera sobre um array vazio, ou seja, nunca barra nada.
+  const bundle = await fetchSeriesBundle({
+    tradeDate,
+    observedAt,
+    fetchFn: opts.fetchFn,
+    secrets: { fredApiKey: opts.env.FRED_API_KEY },
+  });
+  const metrics: QuantMetrics = buildQuantMetrics({
+    runId,
+    tradeDate,
+    ativos: bundle.ativos,
+    curvas: bundle.curvas,
+    faltantes: [...faltantes, ...bundle.semSerie],
+    janelaCorrelacao: JANELA_CORRELACAO,
+  });
   if (!opts.dryRun) {
     await saveQuantMetrics(opts.env.DB, metrics);
   }

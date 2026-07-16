@@ -55,13 +55,23 @@ function parseBlock(block: string): TreasuryRow | null {
  * futuro e o placar do Portão 1 mentiria a favor (CLAUDE.md §3, look-ahead bias).
  */
 export function parseTreasuryXml(xml: string, maxDate?: string): TreasuryRow | null {
+  const rows = parseTreasuryRows(xml, maxDate);
+  return rows.length === 0 ? null : rows[rows.length - 1]!;
+}
+
+/**
+ * Toda a série do feed, em ordem cronológica crescente e sem dado posterior ao pregão.
+ *
+ * O feed anual já traz um bloco por pregão (133 em 15/07), então a curva histórica sai da mesma
+ * requisição que o nível do dia: não custa fetch novo. É o insumo de `delta_1d` e da correlação.
+ */
+export function parseTreasuryRows(xml: string, maxDate?: string): TreasuryRow[] {
   const blocks = propertyBlocks(xml);
-  const rows = (blocks.length > 0 ? blocks : [xml])
+  return (blocks.length > 0 ? blocks : [xml])
     .map(parseBlock)
     .filter((r): r is TreasuryRow => r !== null)
-    .filter((r) => (maxDate ? r.date <= maxDate : true));
-  if (rows.length === 0) return null;
-  return rows.reduce((mais, r) => (r.date > mais.date ? r : mais));
+    .filter((r) => (maxDate ? r.date <= maxDate : true))
+    .sort((a, b) => a.date.localeCompare(b.date));
 }
 
 function nd(key: string, reason: string, observedAt: string): DataPoint {

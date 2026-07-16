@@ -12,6 +12,8 @@
 import { WorkflowEntrypoint, WorkflowStep, WorkflowEvent } from "cloudflare:workers";
 import type { Env } from "./env.js";
 import { checkSession, todayTradeDateBrt } from "./data/calendar.js";
+import { JANELA_CORRELACAO, fetchSeriesBundle } from "./data/series.js";
+import { buildQuantMetrics } from "./quant/build.js";
 import { buildMarketSnapshot, listNdKeys } from "./data/snapshot.js";
 import {
   ensureRun,
@@ -40,6 +42,8 @@ interface Step1Result {
   tradeDate: string;
   snapshot: MarketSnapshot;
   faltantes: string[];
+  /** Vai para o gate no step 3. Atravessa o step porque `step.do` persiste o retorno. */
+  correlacoes: { a: string; b: string; rho: number }[];
 }
 
 interface Step2Result {
@@ -72,6 +76,7 @@ export class MorningCallWorkflow extends WorkflowEntrypoint<Env, MorningCallPara
           tradeDate,
           snapshot: null as unknown as MarketSnapshot,
           faltantes: [],
+          correlacoes: [],
         };
       }
 
@@ -89,17 +94,31 @@ export class MorningCallWorkflow extends WorkflowEntrypoint<Env, MorningCallPara
       const faltantes = listNdKeys(snapshot);
       await saveSnapshot(this.env.DB, snapshot);
 
-      await saveQuantMetrics(this.env.DB, {
-        run_id: runId,
-        trade_date: tradeDate,
-        ativos: [],
-        curvas: [],
-        correlacoes_63d: [],
-        inflacao_implicita: [],
-        faltantes,
+      // Séries históricas: sem elas o quant não tem do que calcular retorno, vol e correlação, e
+      // `correlacoes_63d: []` deixa o MAX_RHO do comitê inerte — o gate roda e nunca barra.
+      const bundle = await fetchSeriesBundle({
+        tradeDate,
+        observedAt,
+        secrets: { fredApiKey: this.env.FRED_API_KEY },
       });
+      const metrics = buildQuantMetrics({
+        runId,
+        tradeDate,
+        ativos: bundle.ativos,
+        curvas: bundle.curvas,
+        faltantes: [...faltantes, ...bundle.semSerie],
+        janelaCorrelacao: JANELA_CORRELACAO,
+      });
+      await saveQuantMetrics(this.env.DB, metrics);
 
-      return { aborted: false, runId, tradeDate, snapshot, faltantes };
+      return {
+        aborted: false,
+        runId,
+        tradeDate,
+        snapshot,
+        faltantes,
+        correlacoes: metrics.correlacoes_63d,
+      };
     });
 
     if (s1.aborted) {
@@ -118,7 +137,9 @@ export class MorningCallWorkflow extends WorkflowEntrypoint<Env, MorningCallPara
       return { aborted: false, runId: s1.runId, reason: "API_KEY ausente" };
     }
 
-    const model = useDeepSeek ? "deepseek-chat" : (this.env.STRATEGIST_MODEL ?? "anthropic/claude-opus-4-7");
+    const model = useDeepSeek
+      ? "deepseek-chat"
+      : (this.env.STRATEGIST_MODEL ?? "anthropic/claude-opus-4-7");
 
     const s2 = await step.do("strategist", async (): Promise<Step2Result> => {
       const strat = await runStrategist({
@@ -143,10 +164,14 @@ export class MorningCallWorkflow extends WorkflowEntrypoint<Env, MorningCallPara
         snapshot: s1.snapshot,
         claims: s2.raw.quant_claims ?? [],
         trades: s2.trades,
-        correlacoes: [],
+        correlacoes: s1.correlacoes,
       });
 
-      const { published, rejected } = filterPublishableTrades(s2.trades, gates.crossCheck.ok, []);
+      const { published, rejected } = filterPublishableTrades(
+        s2.trades,
+        gates.crossCheck.ok,
+        s1.correlacoes,
+      );
 
       for (const t of published) {
         await saveTrade(this.env.DB, {
@@ -232,7 +257,11 @@ export class MorningCallWorkflow extends WorkflowEntrypoint<Env, MorningCallPara
         }
       }
 
-      return { publishedCount: published.length, rejectedCount: rejected.length, aprovado: validation.aprovado };
+      return {
+        publishedCount: published.length,
+        rejectedCount: rejected.length,
+        aprovado: validation.aprovado,
+      };
     });
 
     console.log(
