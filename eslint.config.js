@@ -23,8 +23,15 @@ export default tseslint.config(
     // No entry do Worker, `console.log` É o mecanismo de observabilidade: é o que sai no
     // `wrangler tail`. Tratar como desleixo aqui empurraria o log para `console.warn`, que
     // sinalizaria problema onde há operação normal. Mesma lógica para scripts de linha de
-    // comando, onde stdout é a interface com quem rodou.
-    files: ["apps/morning-call/src/index.ts", "apps/morning-call/scripts/**"],
+    // comando, onde stdout é a interface com quem rodou. `workflow.ts` e `orchestrator/run.ts`
+    // são o próprio pipeline durável (steps do Workflow) e logam os mesmos eventos estruturados
+    // de execução normal, não debug esquecido — mesma razão do entry point.
+    files: [
+      "apps/morning-call/src/index.ts",
+      "apps/morning-call/src/workflow.ts",
+      "apps/morning-call/src/orchestrator/run.ts",
+      "apps/morning-call/scripts/**",
+    ],
     rules: { "no-console": "off" },
   },
   {

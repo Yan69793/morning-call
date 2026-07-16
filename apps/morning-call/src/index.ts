@@ -1,28 +1,16 @@
 /**
- * Entry Cloudflare Worker. Cron só dispara; lógica em orchestrator/run.ts.
+ * Entry Cloudflare Worker. Cron e /trigger criam instância do Workflow (AD-5).
  */
 import type { Env } from "./env.js";
-import { runMorningCall } from "./orchestrator/run.js";
 import { todayTradeDateBrt } from "./data/calendar.js";
+import { isMarkCron } from "./cron.js";
+import { MorningCallWorkflow } from "./workflow.js";
 
 export type { Env };
-
-/** Cron da marcação a mercado, 18:30 BRT. Precisa bater com `wrangler.toml`. */
-export const MARK_CRON = "30 21 * * 1-5";
-
-/**
- * Qual job este disparo é.
- *
- * Era `cron.includes("21") || cron.startsWith("30 21")`, que acerta o cron de hoje por sorte:
- * qualquer expressão com "21" em qualquer posição (minuto 21, dia 21, `21 9 * * *`) seria lida
- * como marcação e o Morning Call do dia não sairia. Comparação exata não tem essa ambiguidade.
- */
-export function isMarkCron(cron: string): boolean {
-  return cron.trim() === MARK_CRON;
-}
+export { MorningCallWorkflow };
 
 export default {
-  fetch(request: Request): Response {
+  async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === "/" || url.pathname === "/health") {
       return Response.json({
@@ -31,14 +19,35 @@ export default {
         trade_date_brt: todayTradeDateBrt(),
       });
     }
+    if (url.pathname === "/trigger") {
+      const secret = url.searchParams.get("secret") ?? "";
+      if (!secret || secret !== (env.RADAR_QUANT_INGEST_SECRET ?? "debug")) {
+        return Response.json({ error: "unauthorized" }, { status: 401 });
+      }
+      const tradeDateBrt = todayTradeDateBrt();
+      try {
+        const instance = await env.WORKFLOW.create({});
+        return Response.json({
+          ok: true,
+          message: "workflow iniciado",
+          trade_date_brt: tradeDateBrt,
+          workflowId: instance.id,
+        });
+      } catch (err) {
+        return Response.json(
+          {
+            ok: false,
+            error: err instanceof Error ? err.message : "desconhecido",
+          },
+          { status: 500 },
+        );
+      }
+    }
     return new Response("not found", { status: 404 });
   },
 
   scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext): void {
     if (isMarkCron(controller.cron)) {
-      // Marcação a mercado depende de feed de preço, que ainda não existe (ver report/mark.ts:
-      // a função está pronta e testada, falta a fonte). No-op explícito e logado: silêncio aqui
-      // seria indistinguível de cron que não disparou.
       console.log(
         JSON.stringify({
           event: "mark_cron_noop",
@@ -49,16 +58,12 @@ export default {
       return;
     }
     ctx.waitUntil(
-      runMorningCall({ env }).then((r) => {
+      env.WORKFLOW.create({}).then((instance) => {
         console.log(
           JSON.stringify({
-            event: "morning_call_done",
-            aborted: r.aborted,
-            runId: r.runId,
-            reason: r.reason,
-            published: r.publishedCount,
-            rejected: r.rejectedCount,
-            aprovado: r.validation?.aprovado,
+            event: "workflow_created",
+            workflowId: instance.id,
+            cron: controller.cron,
           }),
         );
       }),

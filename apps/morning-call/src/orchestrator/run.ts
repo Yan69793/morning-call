@@ -18,6 +18,7 @@ import { filterPublishableTrades, runGates } from "../committee/gates.js";
 import { buildMorningCall } from "../report/build.js";
 import { validateMorningCall } from "../report/validate.js";
 import { extractDayBaselines } from "../quant/baselines.js";
+import { buildMacroSummary } from "../report/sumario.js";
 import type { QuantMetrics } from "../schemas/quant.js";
 import type { MarketSnapshot } from "../schemas/data.js";
 import type { MorningCall } from "../schemas/report.js";
@@ -184,6 +185,39 @@ export async function runMorningCall(opts: RunOptions): Promise<RunResult> {
     });
     const status = faltantes.length > 0 || !validation.aprovado || !gates.ok ? "partial" : "ok";
     await finishRun(opts.env.DB, runId, status, faltantes, generatedAt);
+  }
+
+  // [7] push resumo macro para o Radar Quant (não-bloqueante: falha não afeta o pipeline)
+  if (!opts.dryRun && morningCall && opts.env.RADAR_QUANT_INGEST_URL) {
+    const ingestUrl = `${opts.env.RADAR_QUANT_INGEST_URL.replace(/\/+$/, "")}/api/ingest/macro-summary`;
+    try {
+      const summary = buildMacroSummary(morningCall);
+      const resp = await fetch(ingestUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-ingest-secret": opts.env.RADAR_QUANT_INGEST_SECRET ?? "",
+        },
+        body: JSON.stringify(summary),
+      });
+      if (!resp.ok) {
+        console.log(
+          JSON.stringify({
+            event: "macro_summary_push_failed",
+            status: resp.status,
+            runId,
+          }),
+        );
+      }
+    } catch (err) {
+      console.log(
+        JSON.stringify({
+          event: "macro_summary_push_error",
+          error: err instanceof Error ? err.message : "desconhecido",
+          runId,
+        }),
+      );
+    }
   }
 
   return {

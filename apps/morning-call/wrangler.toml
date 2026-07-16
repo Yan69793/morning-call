@@ -19,16 +19,21 @@ crons = ["30 9 * * 1-5", "30 21 * * 1-5"]
 [[d1_databases]]
 binding = "DB"
 database_name = "morning-call"
-database_id = "TODO_wrangler_d1_create"
+database_id = "c9a7fda3-ce3d-4295-96ed-0d2753d21f5b"
 migrations_dir = "migrations"
 
 # [[kv_namespaces]]
 # binding = "CACHE"
 # id = "TODO"
 
-# [[r2_buckets]]
-# binding = "REPORTS"
-# bucket_name = "morning-call-reports"
+[[r2_buckets]]
+binding = "REPORTS"
+bucket_name = "morning-call-reports"
 
 # [ai]
 # binding = "AI"   # Workers AI (Kimi K2.6 e outros)
+
+[[workflows]]
+name = "morning-call"
+binding = "WORKFLOW"
+class_name = "MorningCallWorkflow"

@@ -31,8 +31,13 @@ export interface OpenRouterOptions {
   messages: ChatMessage[];
   /** JSON schema hint — provedor pode ignorar; parseamos do nosso lado */
   responseFormatJson?: boolean;
+  /** Structured Output: passa o JSON Schema exato para o modelo aderir */
+  responseFormatJsonSchema?: { name: string; schema: Record<string, unknown>; strict?: boolean };
   timeoutMs?: number;
   fetchFn?: typeof fetch;
+  maxTokens?: number;
+  /** Se true, usa api.deepseek.com em vez de OpenRouter (requer DEEPSEEK_API_KEY) */
+  deepseekApi?: boolean;
 }
 
 export interface OpenRouterResult {
@@ -57,28 +62,46 @@ export async function chatCompletion(opts: OpenRouterOptions): Promise<OpenRoute
   const timeoutMs = opts.timeoutMs ?? 120_000;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const isDeepSeek = opts.deepseekApi === true;
+  const apiUrl = isDeepSeek
+    ? "https://api.deepseek.com/v1/chat/completions"
+    : "https://openrouter.ai/api/v1/chat/completions";
   try {
     const body: Record<string, unknown> = {
       model: opts.model,
       messages: opts.messages,
+      max_tokens: opts.maxTokens ?? 4096,
     };
-    if (opts.responseFormatJson) {
+    if (opts.responseFormatJsonSchema) {
+      body.response_format = {
+        type: "json_schema",
+        json_schema: {
+          name: opts.responseFormatJsonSchema.name,
+          schema: opts.responseFormatJsonSchema.schema,
+          strict: opts.responseFormatJsonSchema.strict ?? true,
+        },
+      };
+    } else if (opts.responseFormatJson) {
       body.response_format = { type: "json_object" };
     }
-    const res = await fetchFn("https://openrouter.ai/api/v1/chat/completions", {
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${opts.apiKey}`,
+      "Content-Type": "application/json",
+    };
+    if (!isDeepSeek) {
+      headers["HTTP-Referer"] = "https://vixradar.com";
+      headers["X-Title"] = "morning-call";
+    }
+    const res = await fetchFn(apiUrl, {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${opts.apiKey}`,
-        "Content-Type": "application/json",
-        "HTTP-Referer": "https://vixradar.com",
-        "X-Title": "morning-call",
-      },
+      headers,
       body: JSON.stringify(body),
       signal: controller.signal,
     });
     if (!res.ok) {
       const text = await res.text().catch(() => "");
-      throw new OpenRouterError(`OpenRouter HTTP ${res.status}: ${text.slice(0, 200)}`, res.status);
+      const prefix = isDeepSeek ? "DeepSeek" : "OpenRouter";
+      throw new OpenRouterError(`${prefix} HTTP ${res.status}: ${text.slice(0, 200)}`, res.status);
     }
     const parsed = OpenRouterResponse.safeParse(await res.json());
     if (!parsed.success) {
