@@ -15,7 +15,7 @@ import {
 } from "../db/runs.js";
 import { JANELA_CORRELACAO, fetchSeriesBundle } from "../data/series.js";
 import { runStrategist } from "../agents/strategist.js";
-import { filterPublishableTrades, runGates } from "../committee/gates.js";
+import { decidirPublicacao } from "../committee/decisao.js";
 import { buildMorningCall } from "../report/build.js";
 import { validateMorningCall } from "../report/validate.js";
 import { buildQuantMetrics } from "../quant/build.js";
@@ -127,18 +127,13 @@ export async function runMorningCall(opts: RunOptions): Promise<RunResult> {
     mockContent: opts.mockStrategistContent,
   });
 
-  // [4] gates
-  const gates = runGates({
+  // [4] gates — mesma decisão que o workflow usa, num ponto só (committee/decisao.ts)
+  const { gates, published, rejected } = decidirPublicacao({
     snapshot,
     claims: strat.claims,
     trades: strat.trades,
-    correlacoes: metrics.correlacoes_63d,
+    metrics,
   });
-  const { published, rejected } = filterPublishableTrades(
-    strat.trades,
-    gates.crossCheck.ok,
-    metrics.correlacoes_63d,
-  );
 
   // [5] persist
   if (!opts.dryRun) {

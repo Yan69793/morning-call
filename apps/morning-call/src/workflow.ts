@@ -24,7 +24,7 @@ import {
   saveTrade,
 } from "./db/runs.js";
 import { runStrategist } from "./agents/strategist.js";
-import { filterPublishableTrades, runGates } from "./committee/gates.js";
+import { decidirPublicacao } from "./committee/decisao.js";
 import { buildMorningCall } from "./report/build.js";
 import { validateMorningCall } from "./report/validate.js";
 import { buildMacroSummary } from "./report/sumario.js";
@@ -160,18 +160,12 @@ export class MorningCallWorkflow extends WorkflowEntrypoint<Env, MorningCallPara
 
     // ── Step 3: gates + report + push ──
     const s3 = await step.do("gates-report", async (): Promise<Step3Result> => {
-      const gates = runGates({
+      const { gates, published, rejected } = decidirPublicacao({
         snapshot: s1.snapshot,
         claims: s2.raw.quant_claims ?? [],
         trades: s2.trades,
-        correlacoes: s1.correlacoes,
+        metrics: { correlacoes_63d: s1.correlacoes },
       });
-
-      const { published, rejected } = filterPublishableTrades(
-        s2.trades,
-        gates.crossCheck.ok,
-        s1.correlacoes,
-      );
 
       for (const t of published) {
         await saveTrade(this.env.DB, {
