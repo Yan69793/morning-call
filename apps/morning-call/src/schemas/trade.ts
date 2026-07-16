@@ -198,6 +198,53 @@ export function tradeInstrumentos(draft: TradeCardDraft): string[] {
   }
 }
 
+/** +1 = exposição comprada ao instrumento; −1 = vendida. */
+export interface Exposicao {
+  instrumento: string;
+  sinal: 1 | -1;
+}
+
+const sinalDe = (n: number): 1 | -1 => (n >= 0 ? 1 : -1);
+
+/**
+ * Exposição assinada a cada instrumento, que é o que o gate de crowding precisa saber.
+ *
+ * `tradeInstrumentos` responde "sobre o que é este trade" e basta para rotular; não basta para
+ * medir concentração, porque não diz de que LADO. Duas posições que andam juntas só somam risco
+ * se apontarem para o mesmo lado: comprar A e comprar B com rho alto é dobrar a aposta, mas
+ * comprar A e vender B com o mesmo rho alto é um spread — as pontas se cancelam.
+ *
+ * O sinal compõe as camadas que o schema já modela:
+ * - `direcao` do trade (comprar/vender) inverte a estrutura inteira: vender um steepener é um
+ *   flattener, e todas as pernas viram o oposto.
+ * - `lado` de cada perna (long/short) dá a exposição relativa dentro da estrutura.
+ * - em opções, `call`/`put` inverte o sinal do delta: uma put comprada é exposição VENDIDA ao
+ *   subjacente, e tratá-la como comprada erraria o sinal do gate.
+ *
+ * Limite conhecido: usa o sinal do delta, não a magnitude — o schema não modela moneyness, então
+ * uma call muito fora do dinheiro pesa aqui igual a uma no dinheiro. Para um gate de redundância,
+ * que decide passa/não passa, o sinal é o que importa; ponderar por delta exigiria dado de opções
+ * que o Portão 1 não coleta.
+ */
+export function exposicoesDoTrade(draft: TradeCardDraft): Exposicao[] {
+  const dir = draft.direcao === "comprar" ? 1 : -1;
+  const e = draft.entrada;
+  switch (e.tipo) {
+    case "preco":
+      return [{ instrumento: e.instrumento, sinal: sinalDe(dir) }];
+    case "spread":
+      return e.pernas.map((p) => ({
+        instrumento: p.instrumento,
+        sinal: sinalDe(dir * (p.lado === "long" ? 1 : -1)),
+      }));
+    case "premio":
+      return e.pernas.map((p) => ({
+        instrumento: p.instrumento,
+        sinal: sinalDe(dir * (p.lado === "long" ? 1 : -1) * (p.tipo === "call" ? 1 : -1)),
+      }));
+  }
+}
+
 /**
  * Deriva o risco-retorno. Única fonte do número: nenhum agente pode declará-lo.
  * O original tinha `risco_retorno: z.number()` ao lado de retorno e perda em texto livre, ou

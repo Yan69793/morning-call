@@ -9,7 +9,7 @@
 import { buildSnapshotIndex, crossCheckClaims, type CrossCheckResult } from "./crossCheck.js";
 import type { MarketSnapshot } from "../schemas/data.js";
 import type { QuantClaim } from "../schemas/agents.js";
-import { tradeInstrumentos, type TradeCard } from "../schemas/trade.js";
+import { exposicoesDoTrade, type TradeCard } from "../schemas/trade.js";
 
 export interface Correlacao {
   a: string;
@@ -28,9 +28,16 @@ export interface GateResult {
 const MIN_RISCO_RETORNO = 1.5;
 
 /**
- * Acima disto, dois trades são a mesma aposta com dois nomes, e o segundo só dobra o risco sem
- * dobrar a tese. Não é lei da natureza: é um teto operacional, e por isso o trade pode passar
- * assim mesmo se declarar por que a redundância é intencional (ex.: um é hedge do outro).
+ * Teto de CONCENTRAÇÃO: acima disto, dois trades são a mesma aposta com dois nomes, e o segundo
+ * só dobra o risco sem dobrar a tese. Não é lei da natureza, é um teto operacional — por isso o
+ * trade ainda passa se declarar por que a redundância é intencional.
+ *
+ * Comparado com `rho > MAX_RHO`, não `|rho| > MAX_RHO`, seguindo a prática de mesa: o que um gate
+ * de crowding existe para pegar é concentração, e correlação negativa entre duas posições é
+ * diversificação — o oposto de redundância. A versão anterior barrava hedge natural: duas compras
+ * em ativos com rho = −0,9 se protegem uma da outra, e eram tratadas como se fossem a mesma
+ * aposta. O sinal só faz sentido depois que a exposição é levada em conta, o que é feito em
+ * `correlacaoEntreTrades` via `exposicoesDoTrade`.
  */
 const MAX_RHO = 0.7;
 
@@ -45,7 +52,14 @@ function rhoEntre(correlacoes: readonly Correlacao[], x: string, y: string): num
 }
 
 /**
- * Correlação máxima observada entre dois trades, considerando todos os pares de instrumentos.
+ * Correlação da EXPOSIÇÃO entre dois trades: o rho do mercado, com o sinal ajustado pelo lado de
+ * cada ponta. Positivo alto = concentração (as duas posições ganham e perdem juntas). Negativo =
+ * as pontas se compensam.
+ *
+ * Devolve o máximo ASSINADO, não o maior em módulo. A diferença é o ponto: `Math.abs` fazia um
+ * par fortemente anticorrelacionado — que é hedge — parecer o par mais perigoso do conjunto, e
+ * mascarava um par positivo menor que fosse a concentração real.
+ *
  * `null` quando o quant não tem o par: não saber a correlação não é o mesmo que ela ser baixa,
  * então o chamador decide, e o gate não inventa um número para poder opinar.
  */
@@ -55,11 +69,15 @@ export function correlacaoEntreTrades(
   correlacoes: readonly Correlacao[],
 ): number | null {
   let max: number | null = null;
-  for (const ia of tradeInstrumentos(a.draft)) {
-    for (const ib of tradeInstrumentos(b.draft)) {
-      const rho = ia === ib ? 1 : rhoEntre(correlacoes, ia, ib);
+  for (const ea of exposicoesDoTrade(a.draft)) {
+    for (const eb of exposicoesDoTrade(b.draft)) {
+      const rho =
+        ea.instrumento === eb.instrumento
+          ? 1
+          : rhoEntre(correlacoes, ea.instrumento, eb.instrumento);
       if (rho === null) continue;
-      if (max === null || Math.abs(rho) > Math.abs(max)) max = rho;
+      const exposto = rho * ea.sinal * eb.sinal;
+      if (max === null || exposto > max) max = exposto;
     }
   }
   return max;
@@ -161,7 +179,7 @@ export function filterPublishableTrades(
 
     const redundante = published.find((ja) => {
       const rho = correlacaoEntreTrades(t, ja, correlacoes);
-      return rho !== null && Math.abs(rho) > MAX_RHO;
+      return rho !== null && rho > MAX_RHO;
     });
 
     if (redundante && !justificaRedundancia(t)) {
