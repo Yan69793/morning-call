@@ -1,8 +1,110 @@
+# =====================================================================
+# POLÍTICA: NEGAR POR PADRÃO
+#
+# Nada é versionado a menos que liberado explicitamente na seção 3.
+# Este repo nunca teve deny-by-default e foi empurrado para remote só
+# depois desta política existir. Motivo: o working tree carrega segredos
+# (scripts/.env com FINNHUB_TOKEN, worker/.dev.vars com INGEST_SECRET) que
+# um `git add -A` sem esta trava publicaria. O .gitignore enumerativo
+# anterior pegava esses dois, mas um segredo NOVO com outro nome nasceria
+# fora da lista. Negar por padrão não exige lembrar.
+#
+# Lembrete: .gitignore NÃO solta arquivo já rastreado. Para tirar algo do
+# git sem apagar do disco: git rm --cached <arquivo>
+# =====================================================================
+
+# --- 1) Negar tudo ---------------------------------------------------
+*
+
+# --- 2) Permitir que o git desça nos diretórios -----------------------
+!*/
+
+# --- 3) Liberar código-fonte e documentação ---------------------------
+!*.js
+!*.mjs
+!*.cjs
+!*.ts
+!*.tsx
+!*.jsx
+!*.json
+!*.md
+!*.css
+!*.html
+!*.toml
+!*.yml
+!*.yaml
+!*.sql
+!*.sh
+!*.ps1
+!*.pine
+!.gitignore
+!.gitattributes
+!.dev.vars.example
+!.env.example
+
+# =====================================================================
+# 4) RE-NEGAÇÃO — vem DEPOIS de propósito: sobrepõe a seção 3.
+# =====================================================================
+
+# --- 4a) Dependências e build ----------------------------------------
 node_modules/
 dist/
-.wrangler/
-.dev.vars
-*.log
-.DS_Store
+dist-assets/
+build/
 coverage/
+.cache/
+.wrangler/
+__pycache__/
+*.pyc
+
+# Resíduo de sessão de skill (mockups de brainstorm), não é produto.
+.superpowers/
+
+# --- 4b) Segredos e ambiente -----------------------------------------
+# .env* e .dev.vars carregam FINNHUB_TOKEN, INGEST_SECRET etc. A seção 3
+# não os liberaria (sem extensão na allowlist), mas explicitar aqui é a
+# segunda tranca. Os .example ficam liberados na seção 3, de propósito.
 .env
+.env.*
+*.env
+.dev.vars
+.dev.vars.*
+*.pem
+*.key
+secrets.json
+*.log
+
+# Exceção: .env.production do frontend tem só VITE_API_URL e
+# VITE_MORNING_CALL_API_URL — endpoints públicos, compilados no bundle do
+# Vite por natureza. Não são segredos, e o build de produção precisa deles.
+# Vem depois de `.env.*` para sobrepor a negação acima.
+!apps/radar-quant/frontend/.env.production
+
+# --- 4c) Artefatos gerados pela automação do scan diário -------------
+# Dados de mercado gerados, não código. A seção 3 liberaria os .json.
+apps/radar-quant/scripts/bars.json
+apps/radar-quant/scripts/news.json
+apps/radar-quant/scripts/out/
+
+# --- 4d) Playwright, screenshots e dumps de sessão -------------------
+# .png renderiza a UI e não é pesquisável por grep.
+.playwright-mcp/
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+
+# --- 4e) OS e temporários --------------------------------------------
+.DS_Store
+Thumbs.db
+desktop.ini
+*.tmp
+*.bak
+*.swp
+*~
+
+# --- 4f) Config local do Claude Code ---------------------------------
+# settings.local.json e por maquina, em qualquer nivel. launch.json fica
+# versionado (definido na allowlist via .json): descreve o dev server.
+**/settings.local.json

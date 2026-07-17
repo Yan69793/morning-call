@@ -6,7 +6,7 @@ interface Props { rows: OptimizationResult[] }
 export function OptimizationTable({ rows }: Props) {
   if (rows.length === 0) {
     return (
-      <div className="text-text-muted text-sm p-8 text-center">
+      <div className="text-text-muted text-xs sm:text-sm p-6 sm:p-8 text-center">
         Nenhuma combinação corresponde aos filtros.
       </div>
     )

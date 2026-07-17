@@ -21,6 +21,7 @@
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260615.1",
     "@vitest/coverage-v8": "^4.1.9",
+    "chrome-remote-interface": "^0.33.2",
     "typescript": "^5.5.4",
     "vitest": "^4.1.9",
     "wrangler": "^4.100.0"

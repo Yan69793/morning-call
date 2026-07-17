@@ -13,6 +13,6 @@ binding = "KV"
 id = "d7723f25facd419e92f7062ae25acceb"
 
 [vars]
-CORS_ORIGINS = "https://radar-quant-brasil.pages.dev"
+CORS_ORIGINS = "https://radar-quant-brasil.pages.dev,https://morning-call.prospects-intel.workers.dev"
 
 # Secret (NAO versionar): wrangler secret put ANTHROPIC_API_KEY

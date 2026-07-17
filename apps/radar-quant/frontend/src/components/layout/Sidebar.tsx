@@ -2,11 +2,13 @@ import { useState } from 'react'
 import { NavLink } from 'react-router-dom'
 
 const NAV = [
-  { to: '/',         icon: '⬡', label: 'Radar' },
-  { to: '/strategy', icon: '◈', label: 'Estratégia' },
-  { to: '/operator', icon: '◉', label: 'Operador' },
-  { to: '/history',  icon: '◷', label: 'Histórico' },
-  { to: '/signals',  icon: '⚡', label: 'Sinais' },
+  { to: '/',              icon: '⬡', label: 'Radar' },
+  { to: '/morning-call',  icon: '☀', label: 'Morning Call' },
+  { to: '/agenda',        icon: '📅', label: 'Agenda' },
+  { to: '/strategy',      icon: '◈', label: 'Estratégia' },
+  { to: '/operator',      icon: '◉', label: 'Operador' },
+  { to: '/history',       icon: '◷', label: 'Histórico' },
+  { to: '/signals',       icon: '⚡', label: 'Sinais' },
 ]
 
 export function Sidebar() {
@@ -17,7 +19,7 @@ export function Sidebar() {
       {/* Mobile menu button */}
       <button
         onClick={() => setIsOpen(true)}
-        className="lg:hidden fixed bottom-4 right-4 z-50 w-12 h-12 bg-accent-blue text-white rounded-full shadow-lg flex items-center justify-center"
+        className="lg:hidden fixed bottom-6 right-4 z-50 w-12 h-12 bg-accent-blue text-white rounded-full shadow-lg flex items-center justify-center active:scale-95 transition-transform"
       >
         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />

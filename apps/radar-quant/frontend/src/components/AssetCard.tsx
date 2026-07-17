@@ -17,15 +17,15 @@ export function AssetCard({ item }: { item: RadarItem }) {
 
   return (
     <div
-      className={`bg-bg-card dark:bg-dark-bg-card rounded-xl border p-4 flex flex-col gap-3 transition-shadow hover:shadow-md ${
+      className={`bg-bg-card dark:bg-dark-bg-card rounded-xl border p-3 sm:p-4 flex flex-col gap-2.5 sm:gap-3 transition-shadow hover:shadow-md ${
         item.alert ? 'border-accent-yellow' : 'border-bg-border dark:border-dark-bg-border'
       }`}
     >
       {/* Header */}
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <div className="text-[11px] text-text-muted dark:text-dark-text-muted truncate">{item.name}</div>
-          <div className="text-sm font-semibold text-text-primary dark:text-dark-text-primary font-mono">{ticker}</div>
+          <div className="text-[10px] sm:text-[11px] text-text-muted dark:text-dark-text-muted truncate">{item.name}</div>
+          <div className="text-xs sm:text-sm font-semibold text-text-primary dark:text-dark-text-primary font-mono">{ticker}</div>
         </div>
         <div className="flex flex-col items-end gap-1 shrink-0">
           <Tooltip content={`Regime: ${item.regime} - estado atual do mercado baseado em tendência e volatilidade.`}>
@@ -38,7 +38,7 @@ export function AssetCard({ item }: { item: RadarItem }) {
       </div>
 
       {/* Preço */}
-      <div className="font-mono text-lg font-semibold text-text-primary dark:text-dark-text-primary">
+      <div className="font-mono text-base sm:text-lg font-semibold text-text-primary dark:text-dark-text-primary">
         {fmtPrice(item.last)}
       </div>
 

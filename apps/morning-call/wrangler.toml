@@ -33,6 +33,10 @@ bucket_name = "morning-call-reports"
 # [ai]
 # binding = "AI"   # Workers AI (Kimi K2.6 e outros)
 
+[assets]
+directory = "dist-assets"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
 [[workflows]]
 name = "morning-call"
 binding = "WORKFLOW"

@@ -10,9 +10,9 @@ export function Signals() {
   const signals = (data ?? []).filter(s => s.mode === mode)
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3 sm:space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-lg font-semibold text-text-primary dark:text-dark-text-primary">Sinais</h1>
+        <h1 className="text-base sm:text-lg font-semibold text-text-primary dark:text-dark-text-primary">Sinais</h1>
         <div className="flex gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-0.5">
           {(['swing', 'intraday'] as SignalMode[]).map(m => (
             <button
@@ -28,8 +28,8 @@ export function Signals() {
         </div>
       </div>
 
-      {loading && <div className="text-text-muted dark:text-dark-text-muted text-sm">Carregando sinais...</div>}
-      {error && <div className="text-accent-red text-sm">Erro: {error}</div>}
+      {loading && <div className="text-text-muted dark:text-dark-text-muted text-xs sm:text-sm">Carregando sinais...</div>}
+      {error && <div className="text-accent-red text-xs sm:text-sm">Erro: {error}</div>}
       {!loading && !error && <SignalFeed signals={signals} mode={mode} />}
     </div>
   )

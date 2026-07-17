@@ -22,7 +22,7 @@ export function OptimizationFilters({ filters, onChange, total, filtered }: Prop
     onChange({ ...filters, [k]: v })
 
   return (
-    <div className="flex flex-wrap gap-4 p-4 bg-white border border-bg-border rounded-xl">
+    <div className="flex flex-wrap gap-3 sm:gap-4 p-3 sm:p-4 bg-white border border-bg-border rounded-xl">
       <div>
         <label className={labelCls}>Ordenar por</label>
         <select className={inputCls} value={filters.sortBy} onChange={e => set('sortBy', e.target.value as Filters['sortBy'])}>

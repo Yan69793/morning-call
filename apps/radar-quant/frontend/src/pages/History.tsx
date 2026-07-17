@@ -71,29 +71,29 @@ export function History() {
   }, [dateB])
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div>
-        <h1 className="text-lg font-semibold text-text-primary">Histórico de Scans</h1>
-        <p className="text-xs text-text-muted mt-0.5">Compare scores e regimes entre duas datas</p>
+        <h1 className="text-base sm:text-lg font-semibold text-text-primary">Histórico de Scans</h1>
+        <p className="text-[10px] sm:text-xs text-text-muted mt-0.5">Compare scores e regimes entre duas datas</p>
       </div>
 
       {/* Seletor de datas */}
-      <div className="flex flex-wrap items-end gap-4 p-4 bg-white border border-bg-border rounded-xl">
-        <div>
-          <label className="block text-[10px] text-text-muted uppercase tracking-wide mb-1.5">Data A (mais recente)</label>
-          <select className={selectCls} value={dateA} onChange={e => setDateA(e.target.value)} disabled={loadingDates}>
+      <div className="flex flex-wrap items-end gap-2 sm:gap-4 p-3 sm:p-4 bg-white border border-bg-border rounded-xl">
+        <div className="w-full sm:w-auto">
+          <label className="block text-[9px] sm:text-[10px] text-text-muted uppercase tracking-wide mb-1 sm:mb-1.5">Data A (mais recente)</label>
+          <select className={`${selectCls} w-full sm:w-auto`} value={dateA} onChange={e => setDateA(e.target.value)} disabled={loadingDates}>
             {dates?.map(d => <option key={d.market_date} value={d.market_date}>{d.market_date}</option>)}
           </select>
         </div>
-        <div className="text-text-dim text-sm pb-1.5">vs</div>
-        <div>
-          <label className="block text-[10px] text-text-muted uppercase tracking-wide mb-1.5">Data B (comparação)</label>
-          <select className={selectCls} value={dateB} onChange={e => setDateB(e.target.value)} disabled={loadingDates}>
+        <div className="text-text-dim text-xs sm:text-sm pb-1 sm:pb-1.5">vs</div>
+        <div className="w-full sm:w-auto">
+          <label className="block text-[9px] sm:text-[10px] text-text-muted uppercase tracking-wide mb-1 sm:mb-1.5">Data B (comparação)</label>
+          <select className={`${selectCls} w-full sm:w-auto`} value={dateB} onChange={e => setDateB(e.target.value)} disabled={loadingDates}>
             {dates?.map(d => <option key={d.market_date} value={d.market_date}>{d.market_date}</option>)}
           </select>
         </div>
         {scanA && scanB && (
-          <div className="ml-auto self-end text-xs text-text-muted">
+          <div className="ml-auto self-end text-[10px] sm:text-xs text-text-muted">
             {scanA.items.length} ativos em A · {scanB.items.length} em B
           </div>
         )}

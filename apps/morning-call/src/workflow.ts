@@ -24,6 +24,8 @@ import {
   saveTrade,
 } from "./db/runs.js";
 import { runStrategist } from "./agents/strategist.js";
+import { runCalendarAgent } from "./agents/calendar.js";
+import { fetchAgendaEvents } from "./data/agenda/index.js";
 import { decidirPublicacao } from "./committee/decisao.js";
 import { buildMorningCall } from "./report/build.js";
 import { validateMorningCall } from "./report/validate.js";
@@ -31,6 +33,7 @@ import { buildMacroSummary } from "./report/sumario.js";
 import type { MarketSnapshot } from "./schemas/data.js";
 import type { TradeCard } from "./schemas/trade.js";
 import type { StrategistRaw } from "./agents/strategist.js";
+import type { EconomicAgenda } from "./schemas/agenda.js";
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface MorningCallParams {}
@@ -52,6 +55,11 @@ interface Step2Result {
   model: string;
   promptVersion: string;
   generatedAt: string;
+}
+
+interface Step2bResult {
+  agenda: EconomicAgenda | null;
+  agendaError?: string;
 }
 
 interface Step3Result {
@@ -158,6 +166,67 @@ export class MorningCallWorkflow extends WorkflowEntrypoint<Env, MorningCallPara
       };
     });
 
+    // ── Step 2.5: economic calendar (best-effort, nao bloqueia) ──
+    const s2b = await step.do("economic-calendar", async (): Promise<Step2bResult> => {
+      try {
+        // Scraping de eventos
+        const { eventos, fontes } = await fetchAgendaEvents({
+          tradeDate: s1.tradeDate,
+        });
+
+        // LLM para analise de impacto (mesmo com 0 eventos, gera agenda de dia calmo)
+        const deepseekKeyForCal = this.env.DEEPSEEK_API_KEY;
+        const openRouterKeyForCal = this.env.OPENROUTER_API_KEY;
+        const useDeepSeekForCal = Boolean(deepseekKeyForCal);
+        const calApiKey = useDeepSeekForCal
+          ? (deepseekKeyForCal ?? "")
+          : (openRouterKeyForCal ?? "");
+        const calModel = useDeepSeekForCal
+          ? "deepseek-chat"
+          : (this.env.STRATEGIST_MODEL ?? "anthropic/claude-opus-4-7");
+
+        if (!calApiKey) {
+          return { agenda: null, agendaError: "API_KEY ausente para calendario" };
+        }
+
+        const calResult = await runCalendarAgent({
+          input: {
+            trade_date: s1.tradeDate,
+            eventos,
+            fonte: fontes.join(", ") || "fallback-estatico",
+          },
+          apiKey: calApiKey,
+          model: calModel,
+          runId: s1.runId,
+          deepseekApi: useDeepSeekForCal,
+        });
+
+        console.log(
+          JSON.stringify({
+            event: "workflow_calendar_ok",
+            runId: s1.runId,
+            eventos: calResult.agenda.eventos.length,
+            nivel_alerta: calResult.agenda.nivel_alerta,
+            fontes,
+          }),
+        );
+
+        return { agenda: calResult.agenda };
+      } catch (err) {
+        console.log(
+          JSON.stringify({
+            event: "workflow_calendar_error",
+            error: err instanceof Error ? err.message : "desconhecido",
+            runId: s1.runId,
+          }),
+        );
+        return {
+          agenda: null,
+          agendaError: err instanceof Error ? err.message : "erro desconhecido",
+        };
+      }
+    });
+
     // ── Step 3: gates + report + push ──
     const s3 = await step.do("gates-report", async (): Promise<Step3Result> => {
       const { gates, published, rejected } = decidirPublicacao({
@@ -220,7 +289,12 @@ export class MorningCallWorkflow extends WorkflowEntrypoint<Env, MorningCallPara
         conviccao: morningCall.abertura.conviccao,
         nTrades: published.length,
         aprovado: validation.aprovado && gates.ok,
-        payload: { morningCall, validation, gateReasons: gates.reasons },
+        payload: {
+          morningCall,
+          validation,
+          gateReasons: gates.reasons,
+          agenda: s2b.agenda,
+        },
       });
 
       const status =

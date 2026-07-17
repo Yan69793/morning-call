@@ -15,6 +15,8 @@ import {
 } from "../db/runs.js";
 import { JANELA_CORRELACAO, fetchSeriesBundle } from "../data/series.js";
 import { runStrategist } from "../agents/strategist.js";
+import { runCalendarAgent } from "../agents/calendar.js";
+import { fetchAgendaEvents } from "../data/agenda/index.js";
 import { decidirPublicacao } from "../committee/decisao.js";
 import { buildMorningCall } from "../report/build.js";
 import { validateMorningCall } from "../report/validate.js";
@@ -127,6 +129,42 @@ export async function runMorningCall(opts: RunOptions): Promise<RunResult> {
     mockContent: opts.mockStrategistContent,
   });
 
+  // [3.5] economic calendar (best-effort, nao bloqueia)
+  let economicAgenda = null;
+  try {
+    const { eventos, fontes } = await fetchAgendaEvents({
+      tradeDate,
+      fetchFn: opts.fetchFn,
+    });
+    const calApiKey = (opts.env.DEEPSEEK_API_KEY ?? opts.env.OPENROUTER_API_KEY);
+    if (calApiKey) {
+      const calModel = opts.env.DEEPSEEK_API_KEY
+        ? "deepseek-chat"
+        : (opts.env.STRATEGIST_MODEL ?? "anthropic/claude-sonnet-4");
+      const calResult = await runCalendarAgent({
+        input: {
+          trade_date: tradeDate,
+          eventos,
+          fonte: fontes.join(", ") || "fallback-estatico",
+        },
+        apiKey: calApiKey,
+        model: calModel,
+        runId,
+        fetchFn: opts.fetchFn,
+        deepseekApi: Boolean(opts.env.DEEPSEEK_API_KEY),
+      });
+      economicAgenda = calResult.agenda;
+    }
+  } catch (err) {
+    console.log(
+      JSON.stringify({
+        event: "orchestrator_calendar_error",
+        error: err instanceof Error ? err.message : "desconhecido",
+        runId,
+      }),
+    );
+  }
+
   // [4] gates — mesma decisão que o workflow usa, num ponto só (committee/decisao.ts)
   const { gates, published, rejected } = decidirPublicacao({
     snapshot,
@@ -184,7 +222,12 @@ export async function runMorningCall(opts: RunOptions): Promise<RunResult> {
       conviccao: morningCall.abertura.conviccao,
       nTrades: published.length,
       aprovado: validation.aprovado && gates.ok,
-      payload: { morningCall, validation, gateReasons: gates.reasons },
+      payload: {
+        morningCall,
+        validation,
+        gateReasons: gates.reasons,
+        agenda: economicAgenda,
+      },
     });
     const status = faltantes.length > 0 || !validation.aprovado || !gates.ok ? "partial" : "ok";
     await finishRun(opts.env.DB, runId, status, faltantes, generatedAt);

@@ -4,6 +4,7 @@
 export interface Env {
   DB: D1Database;
   WORKFLOW: Workflow<{ tradeDate?: string }>;
+  ASSETS?: Fetcher;
   OPENROUTER_API_KEY?: string;
   DEEPSEEK_API_KEY?: string;
   FRED_API_KEY?: string;

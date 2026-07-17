@@ -7,21 +7,25 @@ import { Strategy } from './pages/Strategy'
 import { Operator } from './pages/Operator'
 import { History } from './pages/History'
 import { Signals } from './pages/Signals'
+import { MorningCall } from './pages/MorningCall'
+import { Agenda } from './pages/Agenda'
 
 export default function App() {
   return (
     <BrowserRouter>
-      <div className="flex h-screen overflow-hidden bg-bg dark:bg-dark-bg">
+      <div className="flex h-dvh overflow-hidden bg-bg dark:bg-dark-bg" style={{ height: '100dvh' }}>
         <Sidebar />
         <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
           <TopBar />
-          <main className="flex-1 overflow-y-auto p-4">
+          <main className="flex-1 overflow-y-auto p-2 sm:p-3 lg:p-4">
             <Routes>
               <Route path="/" element={<Dashboard />} />
+              <Route path="/agenda" element={<Agenda />} />
               <Route path="/strategy" element={<Strategy />} />
               <Route path="/operator" element={<Operator />} />
               <Route path="/history" element={<History />} />
               <Route path="/signals" element={<Signals />} />
+              <Route path="/morning-call" element={<MorningCall />} />
             </Routes>
           </main>
           <Footer />

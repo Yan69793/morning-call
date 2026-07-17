@@ -28,11 +28,12 @@ export function TopBar() {
   const open = isMarketOpen(now)
 
   return (
-    <header className="h-14 bg-bg-card dark:bg-dark-bg-card border-b border-bg-border dark:border-dark-bg-border flex items-center px-6 gap-4 shrink-0">
-      <span className="text-text-primary dark:text-dark-text-primary font-semibold text-sm tracking-wide">Radar Quant Brasil</span>
-      <div className="ml-auto flex items-center gap-4">
-        <span className="font-mono text-xs text-text-muted dark:text-dark-text-muted">{getBRTTime(now)} BRT</span>
-        <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${
+    <header className="h-14 bg-bg-card dark:bg-dark-bg-card border-b border-bg-border dark:border-dark-bg-border flex items-center px-2 sm:px-4 lg:px-6 gap-2 sm:gap-4 shrink-0">
+      <span className="text-text-primary dark:text-dark-text-primary font-semibold text-xs sm:text-sm tracking-wide hidden sm:inline">Radar Quant Brasil</span>
+      <span className="text-text-primary dark:text-dark-text-primary font-semibold text-xs tracking-wide sm:hidden">RQB</span>
+      <div className="ml-auto flex items-center gap-1.5 sm:gap-3 lg:gap-4">
+        <span className="font-mono text-[10px] sm:text-xs text-text-muted dark:text-dark-text-muted">{getBRTTime(now)} BRT</span>
+        <span className={`text-[10px] sm:text-xs font-medium px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded-full whitespace-nowrap ${
           open
             ? 'bg-green-50 dark:bg-green-900/30 text-accent-green'
             : 'bg-gray-100 dark:bg-gray-800 text-text-muted dark:text-dark-text-muted'

@@ -10,20 +10,18 @@ import { Skeleton } from '../components/Skeleton'
 import type { ScanDocument } from '../types'
 
 const MACRO_TYPES = ['macro', 'rates', 'fx', 'commodity', 'cripto', 'indice', 'vix']
-const MANUAL_TICKERS_KEY = 'radar.manualTickers'
+
+interface WatchlistResponse {
+  symbols: string[]
+}
 
 export function Dashboard() {
   const { data, loading, error } = useApi<ScanDocument>('/api/radar/latest')
+  const { data: watchlistData, reload: reloadWatchlist } = useApi<WatchlistResponse>('/api/watchlist')
   const [selected, setSelected] = useState<string>('')
   const [tickerInput, setTickerInput] = useState('')
-  const [manualTickers, setManualTickers] = useState<string[]>(() => {
-    try {
-      const raw = window.localStorage.getItem(MANUAL_TICKERS_KEY)
-      return raw ? JSON.parse(raw) : []
-    } catch {
-      return []
-    }
-  })
+  const [tickerError, setTickerError] = useState('')
+  const manualTickers = watchlistData?.symbols ?? []
 
   useEffect(() => {
     if (selected || !data) return
@@ -32,28 +30,41 @@ export function Dashboard() {
     if (first) setSelected(first.symbol)
   }, [data, selected])
 
-  useEffect(() => {
-    window.localStorage.setItem(MANUAL_TICKERS_KEY, JSON.stringify(manualTickers))
-  }, [manualTickers])
-
-  function normalizeTicker(value: string) {
-    const symbol = value.trim().toUpperCase()
-    if (!symbol) return ''
-    return symbol.includes(':') ? symbol : `BMFBOVESPA:${symbol}`
-  }
-
-  function addTicker(event: FormEvent<HTMLFormElement>) {
+  async function addTicker(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const symbol = normalizeTicker(tickerInput)
+    const symbol = tickerInput.trim()
     if (!symbol) return
-    setManualTickers(current => current.includes(symbol) ? current : [...current, symbol])
-    setSelected(symbol)
-    setTickerInput('')
+    setTickerError('')
+    try {
+      const base = import.meta.env.VITE_API_URL ?? ''
+      const res = await fetch(`${base}/api/watchlist`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ symbol }),
+      })
+      const body = await res.json()
+      if (!res.ok) {
+        setTickerError(body.error ?? 'Não foi possível adicionar o ticker')
+        return
+      }
+      const normalized = symbol.toUpperCase().includes(':') ? symbol.toUpperCase() : `BMFBOVESPA:${symbol.toUpperCase()}`
+      setSelected(normalized)
+      setTickerInput('')
+      reloadWatchlist()
+    } catch {
+      setTickerError('Falha de rede ao adicionar o ticker')
+    }
   }
 
-  function removeTicker(symbol: string) {
-    setManualTickers(current => current.filter(item => item !== symbol))
+  async function removeTicker(symbol: string) {
     if (selected === symbol) setSelected('')
+    const base = import.meta.env.VITE_API_URL ?? ''
+    await fetch(`${base}/api/watchlist/remove`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ symbol }),
+    })
+    reloadWatchlist()
   }
 
   function explainWarning(warning: string) {
@@ -76,9 +87,9 @@ export function Dashboard() {
       </div>
 
       {/* Layout principal skeleton */}
-      <div className="grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-3 sm:gap-4">
         {/* Coluna esquerda: watchlist skeleton */}
-        <div className="bg-bg-card dark:bg-dark-bg-card rounded-xl border border-bg-border dark:border-dark-bg-border p-3 space-y-2">
+        <div className="bg-bg-card dark:bg-dark-bg-card rounded-xl border border-bg-border dark:border-dark-bg-border p-2 sm:p-3 space-y-2 order-2 lg:order-1">
           <Skeleton className="h-3 w-16" />
           {[1, 2, 3, 4, 5].map(i => (
             <SkeletonWatchlistItem key={i} />
@@ -90,8 +101,8 @@ export function Dashboard() {
         </div>
 
         {/* Coluna direita: gráfico + detalhe skeleton */}
-        <div className="space-y-4">
-          <div className="h-[480px] bg-bg-card dark:bg-dark-bg-card rounded-xl border border-bg-border dark:border-dark-bg-border overflow-hidden">
+        <div className="space-y-3 sm:space-y-4 order-1 lg:order-2">
+          <div className="h-[300px] lg:h-[480px] bg-bg-card dark:bg-dark-bg-card rounded-xl border border-bg-border dark:border-dark-bg-border overflow-hidden">
             <Skeleton className="h-full w-full" />
           </div>
           <SkeletonAssetCard />
@@ -100,7 +111,7 @@ export function Dashboard() {
     </div>
   )
   if (error) return (
-    <div className="text-accent-red text-sm p-4 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800 rounded-xl">
+    <div className="text-accent-red text-xs sm:text-sm p-3 sm:p-4 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800 rounded-xl">
       Erro ao carregar: {error}
     </div>
   )
@@ -113,12 +124,12 @@ export function Dashboard() {
   const manualOnlyTickers = manualTickers.filter(symbol => !data.items.some(item => item.symbol === symbol))
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Cabeçalho */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-lg font-semibold text-text-primary dark:text-dark-text-primary">Radar de Mercado</h1>
-          <p className="text-xs text-text-muted dark:text-dark-text-muted mt-0.5">
+          <h1 className="text-base sm:text-lg font-semibold text-text-primary dark:text-dark-text-primary">Radar de Mercado</h1>
+          <p className="text-[10px] sm:text-xs text-text-muted dark:text-dark-text-muted mt-0.5">
             {data.marketDate} · {data.items.length} ativos · schema {data.schemaVersion}
           </p>
         </div>
@@ -131,9 +142,9 @@ export function Dashboard() {
       </div>
 
       {/* Layout principal: watchlist + gráfico */}
-      <div className="grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-3 sm:gap-4">
         {/* Coluna esquerda: watchlist */}
-        <div className="bg-bg-card dark:bg-dark-bg-card rounded-xl border border-bg-border dark:border-dark-bg-border max-h-[calc(100vh-180px)] lg:max-h-[calc(100vh-180px)] overflow-y-auto order-2 lg:order-1">
+        <div className="bg-bg-card dark:bg-dark-bg-card rounded-xl border border-bg-border dark:border-dark-bg-border max-h-[50dvh] lg:max-h-[calc(100dvh-180px)] overflow-y-auto order-2 lg:order-1">
           <form onSubmit={addTicker} className="p-3 border-b border-bg-border dark:border-dark-bg-border">
             <label className="block text-[10px] font-semibold text-text-muted dark:text-dark-text-muted uppercase tracking-widest mb-2">
               Adicionar ticker
@@ -155,6 +166,9 @@ export function Dashboard() {
             <p className="mt-2 text-[10px] text-text-dim dark:text-dark-text-dim">
               Sem prefixo, assumo B3: PETR4 vira BMFBOVESPA:PETR4.
             </p>
+            {tickerError && (
+              <p className="mt-2 text-[10px] text-accent-red">{tickerError}</p>
+            )}
           </form>
           {manualOnlyTickers.length > 0 && (
             <>
@@ -223,7 +237,7 @@ export function Dashboard() {
           )}
           {selected && !selectedItem && (
             <div className="bg-bg-card dark:bg-dark-bg-card rounded-xl border border-bg-border dark:border-dark-bg-border p-4 text-sm text-text-muted dark:text-dark-text-muted">
-              {selected} foi adicionado manualmente. O grafico abre pelo TradingView, mas esse ticker ainda nao faz parte do radar calculado.
+              {selected} foi registrado para acompanhamento. O gráfico já abre pelo TradingView; os indicadores calculados (score, regime, alertas) entram assim que a próxima varredura do radar rodar.
             </div>
           )}
         </div>

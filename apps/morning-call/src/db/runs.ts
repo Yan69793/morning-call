@@ -143,6 +143,42 @@ export async function saveTrade(db: D1Database, input: PersistTradeInput): Promi
     .run();
 }
 
+export interface LatestReportRow {
+  trade_date: string;
+  generated_at: string;
+  regime: string;
+  vies: string;
+  conviccao: number;
+  n_trades: number;
+  aprovado: boolean;
+  payload: string; // JSON: MorningCall
+}
+
+/** Retorna o relatorio mais recente (maior trade_date) com status ok ou partial. */
+export async function getLatestReport(db: D1Database): Promise<LatestReportRow | null> {
+  const row = await db
+    .prepare(
+      `SELECT runs.trade_date, r.generated_at, r.regime, r.vies, r.conviccao, r.n_trades, r.aprovado, r.payload
+       FROM reports r
+       JOIN runs ON runs.id = r.run_id
+       WHERE runs.status IN ('ok', 'partial')
+       ORDER BY runs.trade_date DESC
+       LIMIT 1`,
+    )
+    .first<{
+      trade_date: string;
+      generated_at: string;
+      regime: string;
+      vies: string;
+      conviccao: number;
+      n_trades: number;
+      aprovado: number;
+      payload: string;
+    }>();
+  if (!row) return null;
+  return { ...row, aprovado: row.aprovado === 1 };
+}
+
 export async function saveReportPointer(
   db: D1Database,
   opts: {

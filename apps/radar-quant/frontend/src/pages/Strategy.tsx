@@ -30,28 +30,28 @@ export function Strategy() {
       })
   }, [data, filters])
 
-  if (loading) return <div className="flex items-center justify-center h-48 text-text-muted text-sm">Carregando...</div>
-  if (error) return <div className="text-accent-red text-sm p-4 bg-red-50 border border-red-100 rounded-xl">Erro: {error}</div>
+  if (loading) return <div className="flex items-center justify-center h-48 text-text-muted text-xs sm:text-sm">Carregando...</div>
+  if (error) return <div className="text-accent-red text-xs sm:text-sm p-3 sm:p-4 bg-red-50 border border-red-100 rounded-xl">Erro: {error}</div>
 
   const top3 = filtered.slice(0, 3)
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div>
-        <h1 className="text-lg font-semibold text-text-primary">Estratégia ORB + VWAP</h1>
-        <p className="text-xs text-text-muted mt-0.5">
+        <h1 className="text-base sm:text-lg font-semibold text-text-primary">Estratégia ORB + VWAP</h1>
+        <p className="text-[10px] sm:text-xs text-text-muted mt-0.5">
           {data?.length?.toLocaleString('pt-BR')} combinações · {filtered.length.toLocaleString('pt-BR')} após filtros
         </p>
       </div>
 
       {/* Top 3 */}
       {top3.length > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
           {top3.map((r, i) => (
-            <div key={i} className="bg-white border border-bg-border rounded-xl p-4 space-y-2">
-              <div className="text-[10px] text-text-muted uppercase tracking-widest">#{i + 1} melhor</div>
-              <div className="font-mono text-base font-semibold text-accent-green">PF {r.profit_factor.toFixed(3)}</div>
-              <div className="text-[11px] text-text-muted leading-relaxed">
+            <div key={i} className="bg-white border border-bg-border rounded-xl p-3 sm:p-4 space-y-2">
+              <div className="text-[9px] sm:text-[10px] text-text-muted uppercase tracking-widest">#{i + 1} melhor</div>
+              <div className="font-mono text-sm sm:text-base font-semibold text-accent-green">PF {r.profit_factor.toFixed(3)}</div>
+              <div className="text-[10px] sm:text-[11px] text-text-muted leading-relaxed">
                 OR{r.or_bars} · Stop {r.stop_pct}% · RR {r.rr}
                 <br />
                 {r.use_vwap ? 'Com VWAP' : 'Sem VWAP'} · {r.allow_sh ? 'Long + Short' : 'Só Long'}

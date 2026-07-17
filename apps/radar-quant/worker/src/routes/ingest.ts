@@ -147,3 +147,40 @@ ingestRoutes.post('/signal', async (c) => {
 
   return c.json({ ok: true, signalId: sig.signalId })
 })
+
+// Recebe o resumo macro do Morning Call. Payload mínimo: regime, viés, convicção, tensão dominante.
+// Persiste em KV (macro:latest + macro:{tradeDate}) para o endpoint de convergência.
+ingestRoutes.post('/macro-summary', async (c) => {
+  const buf = await c.req.arrayBuffer()
+  if (buf.byteLength > 65_536) return c.json({ error: 'Payload too large' }, 413) // 64KB
+
+  const bodyText = new TextDecoder().decode(buf)
+  let data: Record<string, unknown>
+  try {
+    data = JSON.parse(bodyText) as Record<string, unknown>
+  } catch {
+    return c.json({ error: 'Invalid JSON' }, 400)
+  }
+
+  // Validação de contrato mínima
+  if (!data.tradeDate || typeof data.tradeDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(data.tradeDate)) {
+    return c.json({ error: 'Invalid payload: tradeDate must be YYYY-MM-DD' }, 400)
+  }
+  if (!data.regime || typeof data.regime !== 'string') {
+    return c.json({ error: 'Invalid payload: regime required' }, 400)
+  }
+  if (!data.vies || typeof data.vies !== 'string') {
+    return c.json({ error: 'Invalid payload: vies required' }, 400)
+  }
+  if (typeof data.conviccao !== 'number' || data.conviccao < 0 || data.conviccao > 10) {
+    return c.json({ error: 'Invalid payload: conviccao must be 0-10' }, 400)
+  }
+
+  const key = `macro:${data.tradeDate as string}`
+  await Promise.all([
+    c.env.KV.put('macro:latest', bodyText),
+    c.env.KV.put(key, bodyText),
+  ])
+
+  return c.json({ ok: true })
+})

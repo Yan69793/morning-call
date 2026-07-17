@@ -16,3 +16,4 @@ export * from "./types.js";
 export * from "./news.js";
 export * from "./signal-rules.js";
 export * from "./validate.js";
+export * from "./convergence.js";

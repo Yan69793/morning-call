@@ -5,6 +5,8 @@ import { optimizationRoutes } from './routes/optimization'
 import { operatorRoutes } from './routes/operator'
 import { ingestRoutes } from './routes/ingest'
 import { signalRoutes } from './routes/signals'
+import { convergenceRoutes } from './routes/convergence'
+import { watchlistRoutes } from './routes/watchlist'
 
 type Bindings = {
   DB: D1Database
@@ -33,6 +35,8 @@ app.route('/api/optimization', optimizationRoutes)
 app.route('/api/operator', operatorRoutes)
 app.route('/api/ingest', ingestRoutes)
 app.route('/api/signals', signalRoutes)
+app.route('/api/convergence', convergenceRoutes)
+app.route('/api/watchlist', watchlistRoutes)
 
 app.get('/api/health', (c) => c.json({ ok: true }))
 
