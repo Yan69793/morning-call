@@ -24,7 +24,9 @@ app.use('*', async (c, next) => {
     .map(s => s.trim())
     .filter(Boolean)
   return cors({
-    origin: origins.length > 0 ? origins : '*',
+    // Fail-closed: sem CORS_ORIGINS, nenhuma origem passa (lista vazia). Um
+    // deploy que perca a var nao abre o Worker para qualquer origem em silencio.
+    origin: origins,
     allowMethods: ['GET', 'POST', 'OPTIONS'],
     allowHeaders: ['Content-Type', 'x-ingest-secret', 'x-signature', 'x-timestamp'],
   })(c, next)
