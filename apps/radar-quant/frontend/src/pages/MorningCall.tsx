@@ -528,7 +528,7 @@ export function MorningCall() {
           Morning Call
         </h1>
         <p className="text-[10px] sm:text-xs text-text-muted dark:text-dark-text-muted mt-0.5">
-          {report.trade_date} · {data.n_trades ?? 0} trade{(data.n_trades ?? 0) !== 1 ? "s" : ""} · {data.aprovado ? "Aprovado" : "Parcial"}
+          {report.trade_date} · {data?.n_trades ?? 0} trade{(data?.n_trades ?? 0) !== 1 ? "s" : ""} · {data?.aprovado ? "Aprovado" : "Parcial"}
         </p>
       </div>
 
