@@ -96,9 +96,13 @@ Decisão registrada em `ARCHITECTURE.md`. Resumo:
 3. **Teste primeiro** o comportamento de risco (quant, validação, parsing de dados).
 4. Depois de cada fase: rode os testes, mostre resultados, liste arquivos alterados, explique
    decisões, registre limitações, atualize `IMPLEMENTATION_PLAN.md`.
-5. Não prossiga sobre erro silenciosamente. Diante de duas arquiteturas, escolha a mais
+5. Para alterações não triviais, delegar a revisão final ao subagente `code-reviewer`
+   (`.claude/agents/code-reviewer.md`). O agente implementador não pode substituir essa revisão
+   por uma simples releitura própria. Após receber o parecer, corrigir todos os problemas
+   materiais e rodar de novo as validações.
+6. Não prossiga sobre erro silenciosamente. Diante de duas arquiteturas, escolha a mais
    simples, robusta e reversível.
-6. Não refatore módulos não relacionados à tarefa corrente.
+7. Não refatore módulos não relacionados à tarefa corrente.
 
 ---
 
