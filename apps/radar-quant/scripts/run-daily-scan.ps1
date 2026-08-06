@@ -1,4 +1,4 @@
-# Orquestrador do scan diário do Radar Quant Brasil.
+﻿# Orquestrador do scan diário do Radar Quant Brasil.
 # Chamado pelo Task Scheduler do Windows, sem depender de Claude Code aberto.
 #
 # Passos: abre o TradingView Desktop com depuração remota -> coleta as barras
@@ -6,7 +6,7 @@
 #
 # Uso manual: pwsh -File run-daily-scan.ps1
 
-$ErrorActionPreference = 'Stop'
+$ErrorActionPreference = 'Continue'
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $logDir = Join-Path $scriptDir 'logs'
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
@@ -76,9 +76,9 @@ try {
         Pop-Location
     }
 
-    Log 'Scan diário concluído com sucesso.'
-    exit 0
+    Log 'Scan diario concluido com sucesso.'
+    return 0
 } catch {
     Log "ERRO FATAL: $($_.Exception.Message)"
-    exit 1
+    return 1
 }

@@ -1,6 +1,7 @@
 /**
- * Busca notícias via Finnhub (categorias gratuitas: general/forex/merger) e
- * gera news.json para o build-scan.ts. Independente do TradingView — só HTTP.
+ * Busca noticias via Finnhub (categorias gratuitas: general/forex/merger) e
+ * fontes brasileiras (RSS InfoMoney, G1 Economia, Poder360) e gera news.json
+ * para o build-scan.ts. Independente do TradingView — so HTTP.
  *
  * Uso: FINNHUB_TOKEN=... npx tsx fetch-news.ts [out=news.json] [days=2]
  */
@@ -86,6 +87,56 @@ async function main(): Promise<void> {
   const cutoff = now.getTime() - days * 24 * 3600 * 1000
 
   const CATEGORIES = ['general', 'forex', 'merger']
+
+/** Feed RSS brasileiro — complementa Finnhub com cobertura local. */
+interface RssSource {
+  name: string
+  url: string
+}
+const RSS_FEEDS: RssSource[] = [
+  { name: 'InfoMoney', url: 'https://www.infomoney.com.br/feed/' },
+  { name: 'G1 Economia', url: 'https://g1.globo.com/rss/g1/economia/' },
+  { name: 'Poder360', url: 'https://www.poder360.com.br/feed/' },
+]
+
+/**
+ * Faz GET e parseia RSS 2.0 basico (regex, sem dependencia de parser XML).
+ * Devolve array de NewsItem com source = nome do feed.
+ */
+async function fetchRss(source: RssSource): Promise<NewsItem[]> {
+  const items: NewsItem[] = []
+  try {
+    const resp = await fetch(source.url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+      signal: AbortSignal.timeout(15_000),
+    })
+    if (!resp.ok) {
+      console.warn(`  RSS ${source.name}: HTTP ${resp.status}`)
+      return items
+    }
+    const xml = await resp.text()
+    // Extrai blocos <item>...</item> com regex simples (RSS 2.0)
+    const itemBlocks = xml.match(/<item>[\s\S]*?<\/item>/gi) ?? []
+    for (const block of itemBlocks) {
+      const titleMatch = block.match(/<title>(?:<!\[CDATA\[)?([^<\]>]*?)(?:\]\]>)?<\/title>/i)
+      const linkMatch = block.match(/<link>(.*?)<\/link>/i)
+      const dateMatch = block.match(/<pubDate>(.*?)<\/pubDate>/i)
+      if (!titleMatch?.[1] || !linkMatch?.[1]) continue
+      const title = titleMatch[1].trim()
+      const url = linkMatch[1].trim()
+      if (!title || !url) continue
+      items.push({
+        title,
+        source: source.name,
+        url,
+        publishedAt: dateMatch?.[1] ? new Date(dateMatch[1]).toISOString() : null,
+      })
+    }
+  } catch (err) {
+    console.warn(`  RSS ${source.name}: erro — ${(err as Error).message}`)
+  }
+  return items
+}
   console.log(`Buscando notícias por categoria (janela: ${days}d)...`)
   const allItems: NewsItem[] = []
   for (const cat of CATEGORIES) {
@@ -107,8 +158,25 @@ async function main(): Promise<void> {
     return true
   })
 
+  console.log(`\n  Pool Finnhub: ${pool.length} itens unicos`)
+
+  // ---- Buscar RSS brasileiro e mesclar ao pool ----
+  console.log(`\nBuscando noticias RSS brasileiro (${RSS_FEEDS.length} fontes)...`)
+  for (const feed of RSS_FEEDS) {
+    await sleep(300)
+    const rssItems = await fetchRss(feed)
+    console.log(`  RSS ${feed.name}: ${rssItems.length} itens`)
+    for (const item of rssItems) {
+      const key = item.url.replace(/[?#].*$/, '').toLowerCase()
+      if (seen.has(key)) continue
+      seen.add(key)
+      pool.push(item)
+    }
+  }
+  console.log(`  Pool total (Finnhub + RSS BR): ${pool.length} itens unicos`)
+
+  // Macro: top 30 depois da mescla (inclui fontes BR)
   const macro = pool.slice(0, 30)
-  console.log(`\n  Pool total: ${pool.length} itens únicos → ${macro.length} macro`)
 
   const b3List = universe.symbols.filter((s) => s.symbol.startsWith('BMFBOVESPA:'))
   const bySymbol: Record<string, NewsItem[]> = {}
