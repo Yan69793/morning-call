@@ -377,6 +377,8 @@ const IMPRESSOES_DIGITAIS_V2 = [
   "IPCA dentro do esperado",
   "Copom sinaliza corte de 50bps",
   "put IBOV OTM",
+  "taxa Selic meta atual",
+  "dolar spot PTAX",
 ] as const;
 
 /**

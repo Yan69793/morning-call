@@ -222,6 +222,24 @@ export class MorningCallWorkflow extends WorkflowEntrypoint<Env, MorningCallPara
           deepseekApi: useDeepSeekForCal,
         });
 
+        // Diferente do strategist, eco aqui nao aborta a rodada inteira: o calendario e
+        // best-effort e o resto do Morning Call (trades, gates) nao depende dele. Só a agenda
+        // fabricada fica de fora, tratada como a mesma falha best-effort do catch abaixo.
+        if (calResult.echo.length > 0) {
+          console.log(
+            JSON.stringify({
+              event: "workflow_calendar_prompt_echo",
+              runId: s1.runId,
+              model: calResult.model,
+              motivos: calResult.echo,
+            }),
+          );
+          return {
+            agenda: null,
+            agendaError: `eco do prompt no calendario: ${calResult.echo.join(" | ")}`,
+          };
+        }
+
         console.log(
           JSON.stringify({
             event: "workflow_calendar_ok",

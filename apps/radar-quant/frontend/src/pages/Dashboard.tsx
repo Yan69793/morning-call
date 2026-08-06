@@ -67,15 +67,6 @@ export function Dashboard() {
     reloadWatchlist()
   }
 
-  function explainWarning(warning: string) {
-    const [symbol, flag] = warning.split(': ')
-    if (flag === 'staleLastBar') return `${symbol}: ultima barra esta defasada em relacao ao pregao esperado`
-    if (flag === 'missingBars') return `${symbol}: faltam barras no historico recebido`
-    if (flag === 'symbolError') return `${symbol}: sem dados para o simbolo`
-    if (flag === 'flatRange') return `${symbol}: variacao zerada ou inconsistente`
-    return warning
-  }
-
   if (loading) return (
     <div className="space-y-6">
       {/* Cabeçalho skeleton */}
@@ -242,14 +233,6 @@ export function Dashboard() {
           )}
         </div>
       </div>
-
-      {/* Avisos de qualidade */}
-      {data.warnings.length > 0 && (
-        <div className="bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800 rounded-xl p-3 text-[11px] text-amber-700 dark:text-amber-300">
-          <div className="font-semibold mb-1">Avisos de qualidade dos dados</div>
-          <div>{data.warnings.map(explainWarning).join(' · ')}</div>
-        </div>
-      )}
 
       {/* Notícias */}
       {(data.news?.macro?.length ?? 0) > 0 && (
