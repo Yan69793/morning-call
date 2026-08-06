@@ -11,7 +11,8 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit",
-    "gen:schema": "tsx scripts/gen-trade-card-schema.ts"
+    "gen:schema": "tsx scripts/gen-trade-card-schema.ts",
+    "archive": "tsx scripts/save-morning-call.ts"
   },
   "dependencies": {
     "@sz/analytics": "*",
