@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildStrategistSystemPrompt,
+  detectPromptEcho,
   parseStrategistContent,
   runStrategist,
   sealStrategistTrades,
@@ -211,5 +213,87 @@ describe("strategist closed-book + gates", () => {
       generated_at: "2026-07-15T10:00:00.000Z",
     });
     expect(sealed[0]!.risco_retorno.value).toBeCloseTo(3, 12);
+  });
+});
+
+/**
+ * Regressão do defeito medido em produção: entre 2026-07-16 e 2026-08-06 o prompt v2 carregava um
+ * exemplo realista completo e o modelo devolvia o exemplo, não análise. Oito rodadas gravaram
+ * "Compra de Ibovespa futuro" com risco_retorno 1.3043478260869565 idêntico, e os quatro cenários
+ * saíam palavra por palavra iguais aos do prompt. Nada acusou por três semanas.
+ */
+describe("eco do prompt", () => {
+  it("o system prompt não contém mais conteúdo de mercado plausível", () => {
+    const prompt = buildStrategistSystemPrompt();
+    for (const vazamento of [
+      "Compra de Ibovespa futuro",
+      "put IBOV OTM",
+      "132000",
+      "14.25",
+      "5.07",
+      "Fed em compasso de espera",
+      "fiscal nao piora antes de outubro",
+    ]) {
+      expect(prompt).not.toContain(vazamento);
+    }
+    // O esqueleto continua ensinando a forma.
+    expect(prompt).toContain("cenarios");
+    expect(prompt).toContain("cisne_cinza");
+    expect(prompt).toContain("<<");
+  });
+
+  it("inclui o JSON Schema só quando pedido (caminho DeepSeek)", () => {
+    expect(buildStrategistSystemPrompt()).not.toContain("JSON Schema");
+    const comSchema = buildStrategistSystemPrompt({ incluirSchema: true });
+    expect(comSchema).toContain("JSON Schema");
+    expect(comSchema).toContain("sizing_pct_orcamento_risco");
+  });
+
+  it("saída própria não acusa eco", () => {
+    const raw = parseStrategistContent(validMockJson(15));
+    expect(detectPromptEcho(raw)).toEqual([]);
+  });
+
+  it("placeholder do esqueleto vazado reprova", () => {
+    const raw = parseStrategistContent(validMockJson(15));
+    raw.abertura.tensao_macro_dominante = "<<tensão macro dominante do dia, 20+ caracteres>>";
+    const motivos = detectPromptEcho(raw);
+    expect(motivos).toHaveLength(1);
+    expect(motivos[0]).toContain("placeholder do esqueleto");
+  });
+
+  it("frase longa verbatim do prompt v2 reprova sozinha", () => {
+    const raw = parseStrategistContent(validMockJson(15));
+    raw.trades[0]!.tese =
+      "Ibovespa descontado frente aos pares emergentes com expectativa de corte de juros no curto prazo";
+    expect(detectPromptEcho(raw).some((m) => m.includes("verbatim"))).toBe(true);
+  });
+
+  it("acento não escapa da detecção, e três trechos curtos acumulam", () => {
+    const raw = parseStrategistContent(validMockJson(15));
+    // Em produção o modelo devolvia "fiscal não piora" onde o prompt trazia "fiscal nao piora", e
+    // "dólar" onde o prompt trazia "dolar". Comparação crua deixaria os dois passarem.
+    raw.rastreabilidade.hipoteses = ["fiscal não piora antes de outubro"];
+    raw.rastreabilidade.dados_incompletos = ["fluxo estrangeiro na B3 de julho"];
+    raw.cenarios[0]!.gatilhos_observaveis = ["IPCA dentro do esperado"];
+    const motivos = detectPromptEcho(raw);
+    expect(motivos.some((m) => m.includes("trechos curtos"))).toBe(true);
+  });
+
+  it("uma frase curta isolada não reprova — hedge legítimo existe", () => {
+    const raw = parseStrategistContent(validMockJson(15));
+    raw.cenarios[0]!.hedge = "put IBOV OTM";
+    expect(detectPromptEcho(raw)).toEqual([]);
+  });
+
+  it("runStrategist devolve o diagnóstico de eco junto do resultado", async () => {
+    const result = await runStrategist({
+      snapshot,
+      apiKey: "x",
+      model: "mock",
+      runId: RUN,
+      mockContent: validMockJson(15),
+    });
+    expect(result.echo).toEqual([]);
   });
 });

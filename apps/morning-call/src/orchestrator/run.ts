@@ -129,6 +129,22 @@ export async function runMorningCall(opts: RunOptions): Promise<RunResult> {
     mockContent: opts.mockStrategistContent,
   });
 
+  // Mesmo corte do `workflow.ts`: resposta que é eco do prompt não vira relatório. A checagem
+  // aparece nos dois caminhos porque `runStrategist` devolve o diagnóstico e não decide sozinho —
+  // quem grava é quem precisa recusar.
+  if (strat.echo.length > 0) {
+    if (!opts.dryRun) {
+      await finishRun(opts.env.DB, runId, "failed", faltantes, new Date().toISOString());
+    }
+    return {
+      aborted: true,
+      runId,
+      snapshot,
+      reason: `eco do prompt no strategist: ${strat.echo.join(" | ")}`,
+      baselines: extractDayBaselines(snapshot),
+    };
+  }
+
   // [3.5] economic calendar (best-effort, nao bloqueia)
   let economicAgenda = null;
   try {
