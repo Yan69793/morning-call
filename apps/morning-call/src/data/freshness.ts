@@ -17,12 +17,19 @@ import { SNAPSHOT_KEYS } from "./keys.js";
  * Idade máxima aceitável do `as_of`, em dias de calendário, contra o `trade_date`.
  *
  * Calibrado pela periodicidade real de cada série, verificada na API em 2026-07-15:
- * - Diárias (PTAX, Selic/CDI, UST, VIX, DXY, Brent, WTI): 5 dias cobre fim de semana + feriado
- *   emendado sem aceitar dado de semana retrasada.
+ * - Diárias de fonte brasileira e do Tesouro americano (PTAX, Selic/CDI, UST, VIX): 5 dias cobre
+ *   fim de semana + feriado emendado sem aceitar dado de semana retrasada.
  * - Focus: coleta semanal publicada na segunda; 10 dias cobre um feriado na segunda.
  * - IPCA 12m (SGS 13522): mensal, referenciado ao 1º do mês. Em 15/07 o dado legítimo é 01/06,
  *   44 dias. 70 dias dá folga para o IBGE atrasar sem aceitar um trimestre inteiro de defasagem.
  * - SELIC_META: o SGS publica todo dia, mesmo sem Copom — envelhece como série diária.
+ * - DXY_PROXY/BRENT/WTI (FRED DTWEXBGS/DCOILBRENTEU/DCOILWTICO, fonte EIA/Fed): entraram com 5
+ *   dias no lote acima por presunção, "vêm do FRED, tratam como diária" — nunca foram medidas à
+ *   parte. Confirmado em produção em 2026-08-05: Brent e WTI com `as_of` de 27/07 contra pregão de
+ *   05/08, 9 dias, virando N/D toda vez que a EIA atrasa a publicação além de uma semana normal.
+ *   14 dias dá margem sobre o pior caso observado sem aceitar cotação de mês passado. Se voltar a
+ *   estourar mesmo com 14, o problema não é o limite, é a fonte, trocar de provider em vez de
+ *   subir o número nulo de novo.
  */
 export const MAX_AGE_DAYS: Record<string, number> = {
   [SNAPSHOT_KEYS.USDBRL]: 5,
@@ -37,9 +44,9 @@ export const MAX_AGE_DAYS: Record<string, number> = {
   [SNAPSHOT_KEYS.UST_10Y]: 5,
   [SNAPSHOT_KEYS.UST_30Y]: 5,
   [SNAPSHOT_KEYS.VIX]: 5,
-  [SNAPSHOT_KEYS.DXY_PROXY]: 5,
-  [SNAPSHOT_KEYS.BRENT]: 5,
-  [SNAPSHOT_KEYS.WTI]: 5,
+  [SNAPSHOT_KEYS.DXY_PROXY]: 14,
+  [SNAPSHOT_KEYS.BRENT]: 14,
+  [SNAPSHOT_KEYS.WTI]: 14,
 };
 
 /** Conservador de propósito: chave nova sem tolerância declarada é tratada como diária. */

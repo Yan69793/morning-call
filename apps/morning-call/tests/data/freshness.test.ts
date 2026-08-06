@@ -99,6 +99,27 @@ describe("enforceFreshness", () => {
     expect(diario!.status).toBe("ND");
   });
 
+  /**
+   * Caso real de 2026-08-05: Brent e WTI (FRED, fonte EIA) vieram com as_of de 27/07 contra pregão
+   * de 05/08, 9 dias, e caíam no limite diário de 5 por presunção, nunca medido para essas três
+   * chaves. A tolerância subiu para 14 depois desse achado, ver comentário em MAX_AGE_DAYS.
+   */
+  it("BRENT/WTI/DXY_PROXY toleram o atraso de publicação já observado em produção (9 dias)", () => {
+    const asOf = "2026-07-27T18:00:00.000Z";
+    for (const key of [SNAPSHOT_KEYS.BRENT, SNAPSHOT_KEYS.WTI, SNAPSHOT_KEYS.DXY_PROXY]) {
+      const [p] = enforceFreshness([{ ...ok(key, asOf), venue: "GLOBAL_24H" as const }], "2026-08-05");
+      expect(p!.status, `${key} deveria passar com 9 dias`).toBe("OK");
+    }
+  });
+
+  it("BRENT/WTI/DXY_PROXY ainda viram ND acima de 14 dias — o gate não foi desligado", () => {
+    const asOf = "2026-07-20T18:00:00.000Z"; // 16 dias contra 2026-08-05
+    for (const key of [SNAPSHOT_KEYS.BRENT, SNAPSHOT_KEYS.WTI, SNAPSHOT_KEYS.DXY_PROXY]) {
+      const [p] = enforceFreshness([{ ...ok(key, asOf), venue: "GLOBAL_24H" as const }], "2026-08-05");
+      expect(p!.status, `${key} deveria virar ND com 16 dias`).toBe("ND");
+    }
+  });
+
   it("ND continua ND e preserva o motivo original", () => {
     const nd: DataPoint = {
       status: "ND",
