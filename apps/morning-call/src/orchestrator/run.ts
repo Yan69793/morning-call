@@ -46,6 +46,8 @@ export interface RunOptions {
   now?: Date;
   /** testes offline */
   mockStrategistContent?: string;
+  /** testes offline — injeta resposta do calendar agent sem chamar a API */
+  mockCalendarContent?: string;
   fetchFn?: typeof fetch;
   /** se true, não grava D1 (unit test sem binding) */
   dryRun?: boolean;
@@ -129,6 +131,22 @@ export async function runMorningCall(opts: RunOptions): Promise<RunResult> {
     mockContent: opts.mockStrategistContent,
   });
 
+  // Mesmo corte do `workflow.ts`: resposta que é eco do prompt não vira relatório. A checagem
+  // aparece nos dois caminhos porque `runStrategist` devolve o diagnóstico e não decide sozinho —
+  // quem grava é quem precisa recusar.
+  if (strat.echo.length > 0) {
+    if (!opts.dryRun) {
+      await finishRun(opts.env.DB, runId, "failed", faltantes, new Date().toISOString());
+    }
+    return {
+      aborted: true,
+      runId,
+      snapshot,
+      reason: `eco do prompt no strategist: ${strat.echo.join(" | ")}`,
+      baselines: extractDayBaselines(snapshot),
+    };
+  }
+
   // [3.5] economic calendar (best-effort, nao bloqueia)
   let economicAgenda = null;
   try {
@@ -151,9 +169,23 @@ export async function runMorningCall(opts: RunOptions): Promise<RunResult> {
         model: calModel,
         runId,
         fetchFn: opts.fetchFn,
+        mockContent: opts.mockCalendarContent,
         deepseekApi: Boolean(opts.env.DEEPSEEK_API_KEY),
       });
-      economicAgenda = calResult.agenda;
+      // Mesmo corte do workflow.ts: eco no calendario nao aborta o pipeline, só descarta a
+      // agenda fabricada. Trades e gates seguem sem depender deste resultado.
+      if (calResult.echo.length > 0) {
+        console.log(
+          JSON.stringify({
+            event: "orchestrator_calendar_prompt_echo",
+            runId,
+            model: calResult.model,
+            motivos: calResult.echo,
+          }),
+        );
+      } else {
+        economicAgenda = calResult.agenda;
+      }
     }
   } catch (err) {
     console.log(

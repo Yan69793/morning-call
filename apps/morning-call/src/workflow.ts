@@ -55,6 +55,8 @@ interface Step2Result {
   model: string;
   promptVersion: string;
   generatedAt: string;
+  /** Motivos de eco do prompt. Não-vazio derruba a rodada antes de gravar relatório. */
+  echo: string[];
 }
 
 interface Step2bResult {
@@ -163,8 +165,27 @@ export class MorningCallWorkflow extends WorkflowEntrypoint<Env, MorningCallPara
         model: strat.model,
         promptVersion: strat.provenance.prompt_version,
         generatedAt: strat.provenance.generated_at,
+        echo: strat.echo,
       };
     });
+
+    // Eco do prompt derruba a rodada aqui, fora do `step.do`, e de propósito: dentro do step, o
+    // throw dispararia retry, e um modelo que copiou o exemplo copia de novo — pagaríamos a mesma
+    // chamada várias vezes para chegar no mesmo lugar. Nada é gravado como relatório: publicar um
+    // Morning Call que é o prompt refletido de volta é pior que não publicar nada.
+    if (s2.echo.length > 0) {
+      await finishRun(this.env.DB, s1.runId, "failed", s1.faltantes, new Date().toISOString());
+      console.log(
+        JSON.stringify({
+          event: "workflow_prompt_echo",
+          runId: s1.runId,
+          model: s2.model,
+          promptVersion: s2.promptVersion,
+          motivos: s2.echo,
+        }),
+      );
+      return { aborted: true, runId: s1.runId, reason: "eco do prompt", motivos: s2.echo };
+    }
 
     // ── Step 2.5: economic calendar (best-effort, nao bloqueia) ──
     const s2b = await step.do("economic-calendar", async (): Promise<Step2bResult> => {
@@ -200,6 +221,24 @@ export class MorningCallWorkflow extends WorkflowEntrypoint<Env, MorningCallPara
           runId: s1.runId,
           deepseekApi: useDeepSeekForCal,
         });
+
+        // Diferente do strategist, eco aqui nao aborta a rodada inteira: o calendario e
+        // best-effort e o resto do Morning Call (trades, gates) nao depende dele. Só a agenda
+        // fabricada fica de fora, tratada como a mesma falha best-effort do catch abaixo.
+        if (calResult.echo.length > 0) {
+          console.log(
+            JSON.stringify({
+              event: "workflow_calendar_prompt_echo",
+              runId: s1.runId,
+              model: calResult.model,
+              motivos: calResult.echo,
+            }),
+          );
+          return {
+            agenda: null,
+            agendaError: `eco do prompt no calendario: ${calResult.echo.join(" | ")}`,
+          };
+        }
 
         console.log(
           JSON.stringify({

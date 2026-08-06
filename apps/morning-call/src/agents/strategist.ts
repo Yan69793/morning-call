@@ -10,7 +10,7 @@ import type { MarketSnapshot } from "../schemas/data.js";
 import type { Provenance } from "../schemas/common.js";
 import { Rationale } from "../schemas/common.js";
 
-export const PROMPT_VERSION = "strategist@2026-07-16-v2";
+export const PROMPT_VERSION = "strategist@2026-08-06-v3";
 
 export const StrategistRaw = z.object({
   abertura: z.object({
@@ -47,77 +47,120 @@ export const StrategistRaw = z.object({
 });
 export type StrategistRaw = z.infer<typeof StrategistRaw>;
 
-export function buildStrategistSystemPrompt(): string {
-  return [
+export function buildStrategistSystemPrompt(opts?: { incluirSchema?: boolean }): string {
+  const partes = [
     "Você é estrategista multimercado. Closed-book: use APENAS números do snapshot JSON.",
     "Proibido introduzir cotação, taxa, spread ou probabilidade numérica ausente do snapshot.",
     "",
-    "Responda APENAS JSON. Siga EXATAMENTE o formato do exemplo abaixo.",
+    "Responda APENAS JSON, sem cerca de markdown.",
     "Todo valor + unidade é objeto {value, unit}. NUNCA número solto.",
     "Unit válida: BRL, USD, BRL_por_USD, pct, bps, index_points, ratio, contratos.",
     "trades pode ser [] se não houver assimetria. Se houver, 1-7 completos.",
+    "cenarios tem exatamente 4 itens (base, bull, bear, cisne_cinza) e probabilidade_pct soma 100.",
     "",
-    "EXEMPLO DE FORMATO CORRETO (siga esta estrutura exata):",
-    JSON.stringify(STRATEGIST_EXAMPLE, null, 2),
-  ].join("\n");
+    "O esqueleto abaixo define A FORMA, nunca o conteúdo. Texto entre << e >> é instrução do que",
+    "escrever naquele campo, não texto para copiar. Nenhum << ou >> pode sobrar na sua resposta.",
+    "Nunca reaproveite instrumento, nível, tese ou cenário do esqueleto: tudo sai do snapshot do dia.",
+    "",
+    "ESQUELETO (forma, não conteúdo):",
+    JSON.stringify(STRATEGIST_SKELETON, null, 2),
+  ];
+  if (opts?.incluirSchema) {
+    partes.push(
+      "",
+      "A resposta precisa satisfazer este JSON Schema:",
+      JSON.stringify(buildStrategistJsonSchema()),
+    );
+  }
+  return partes.join("\n");
 }
 
-const STRATEGIST_EXAMPLE = {
+/**
+ * Esqueleto de FORMA. Todo texto é placeholder `<<...>>` e todo número é zero, de propósito.
+ *
+ * O prompt v2 trazia aqui um exemplo realista e completo: Ibovespa a 132000, Selic 14.25%, quatro
+ * cenários escritos por extenso. O modelo copiava o conteúdo em vez de seguir a forma. Entre
+ * 2026-07-16 e 2026-08-06, oito rodadas gravaram o mesmo trade "Compra de Ibovespa futuro" com
+ * `risco_retorno` 1.3043478260869565 idêntico bit a bit (3.0 / 2.3 do exemplo), e os quatro
+ * cenários saíam palavra por palavra iguais aos daqui. Só `abertura` e `quant_claims` puxavam
+ * dado real do snapshot. Um exemplo plausível é indistinguível de uma resposta plausível, e o
+ * modelo escolhe o caminho barato.
+ *
+ * O delimitador `<<` `>>` existe para ser detectável: `detectPromptEcho` reprova a rodada se algum
+ * vazar para a saída. O gate é o mecanismo; a instrução no prompt é só o pedido educado.
+ */
+const STRATEGIST_SKELETON = {
   abertura: {
-    tensao_macro_dominante: "Fed em compasso de espera enquanto fiscal brasileiro segue como risco principal",
-    regime: "desinflacionario",
-    vies: "comprador",
-    conviccao: 7,
-    premissa_que_sustenta_precos: "mercado precifica corte de 25bps na proxima reuniao do Copom",
-    fato_que_quebraria: "IPCA-15 acima de 0.5% ou comunicacao mais dura do BCB",
+    tensao_macro_dominante: "<<tensão macro dominante do dia, 20+ caracteres>>",
+    regime: "<<um de: goldilocks|reflacionario|estagflacionario|desinflacionario|recessivo|risk_on_especulativo|risk_off_sistemico|transicao>>",
+    vies: "<<um de: comprador|vendedor|neutro|long_vol|short_vol>>",
+    conviccao: 0,
+    premissa_que_sustenta_precos: "<<premissa que sustenta os preços hoje, 20+ caracteres>>",
+    fato_que_quebraria: "<<fato observável que quebraria a premissa, 20+ caracteres>>",
   },
   quant_claims: [
-    { snapshot_key: "SELIC_META", valor_citado: { value: 14.25, unit: "pct" }, contexto: "taxa Selic meta atual" },
-    { snapshot_key: "USDBRL", valor_citado: { value: 5.07, unit: "BRL_por_USD" }, contexto: "dolar spot PTAX" },
+    {
+      snapshot_key: "<<chave existente em snapshot_ok>>",
+      valor_citado: { value: 0, unit: "<<unit da chave>>" },
+      contexto: "<<o que esse número representa>>",
+    },
   ],
   trades: [
     {
-      nome: "Compra de Ibovespa futuro",
-      classe: "equities BR",
-      categoria: "direcional",
-      horizonte: "swing",
-      direcao: "comprar",
+      nome: "<<nome curto da operação>>",
+      classe: "<<classe de ativo>>",
+      categoria: "<<um de: direcional|valor_relativo|carry|convexidade|hedge|arbitragem_narrativa|evento|assimetria_cauda>>",
+      horizonte: "<<um de: intraday|swing|tatico_1_3m|estrategico_6_12m>>",
+      direcao: "<<comprar ou vender>>",
       entrada: {
-        tipo: "preco",
-        instrumento: "IBOV",
-        nivel: { value: 132000, unit: "index_points" },
-        faixa: { min: { value: 131000, unit: "index_points" }, max: { value: 133000, unit: "index_points" } },
+        tipo: "<<preco, spread ou premio>>",
+        instrumento: "<<instrumento negociado>>",
+        nivel: { value: 0, unit: "<<unit>>" },
+        faixa: { min: { value: 0, unit: "<<unit>>" }, max: { value: 0, unit: "<<unit>>" } },
       },
-      alvo_1: { value: 136000, unit: "index_points" },
-      alvo_2: { value: 140000, unit: "index_points" },
-      invalidacao: { descricao: "fecha abaixo do suporte em 129000 pontos com volume acima da media", nivel: { value: 129000, unit: "index_points" } },
-      tese: "Ibovespa descontado frente aos pares emergentes com expectativa de corte de juros no curto prazo",
-      erro_precificacao: "mercado subestima a velocidade de queda da Selic no segundo semestre",
-      catalisador: "ata do Copom sinalizando fim do ciclo de aperto",
-      por_que_agora: "divergencia entre DI futuro e expectativa Focus abre janela de entrada antes do Copom",
-      por_que_nao_consensual: "consenso ainda esta cauteloso com Brasil devido a ruido fiscal recente",
-      riscos_ocultos: "piora fiscal pode anular efeito de corte de juros sobre multiples",
-      plano_saida: "reduzir 50% no alvo_1, zerar no alvo_2 ou na invalidacao",
-      estrutura_alternativa: "call spread no IBOV para limitar risco de cauda fiscal",
-      correlacao_com_outras: "alta correlacao com curva de juros DI e DXY",
-      retorno_potencial: { value: 3.0, unit: "pct" },
-      perda_maxima: { value: 2.3, unit: "pct" },
-      sizing_pct_orcamento_risco: 2.0,
-      conviccao: 7,
-      fontes: ["SELIC_META", "USDBRL", "IBOV"],
+      alvo_1: { value: 0, unit: "<<unit>>" },
+      alvo_2: { value: 0, unit: "<<unit>>" },
+      invalidacao: {
+        descricao: "<<condição objetiva que invalida a tese, 20+ caracteres>>",
+        nivel: { value: 0, unit: "<<unit>>" },
+      },
+      tese: "<<tese, 20+ caracteres>>",
+      erro_precificacao: "<<o que o mercado está errando, 20+ caracteres>>",
+      catalisador: "<<evento que destrava a tese, 20+ caracteres>>",
+      por_que_agora: "<<por que a janela é agora, 20+ caracteres>>",
+      por_que_nao_consensual: "<<por que não é consenso, 20+ caracteres>>",
+      riscos_ocultos: "<<risco não óbvio, 20+ caracteres>>",
+      plano_saida: "<<regra de saída em alvo e em stop, 20+ caracteres>>",
+      estrutura_alternativa: "<<outra forma de montar a mesma exposição, 20+ caracteres>>",
+      correlacao_com_outras: "<<relação com os demais trades, 20+ caracteres>>",
+      retorno_potencial: { value: 0, unit: "<<unit>>" },
+      perda_maxima: { value: 0, unit: "<<unit>>" },
+      sizing_pct_orcamento_risco: 0,
+      conviccao: 0,
+      fontes: ["<<snapshot_key usada>>"],
     },
   ],
   cenarios: [
-    { nome: "base", probabilidade_pct: 50, gatilhos_observaveis: ["IPCA dentro do esperado"], vencedores: ["Ibovespa", "small caps"], perdedores: ["dolar", "DI curto"], operacao_preferida: "compra de IBOV", hedge: "put IBOV OTM", sinal_confirmacao: "IPCA abaixo de 0.3%", sinal_invalidacao: "IPCA acima de 0.5%" },
-    { nome: "bull", probabilidade_pct: 20, gatilhos_observaveis: ["Copom sinaliza corte de 50bps"], vencedores: ["small caps", "consumo"], perdedores: ["DI curto"], operacao_preferida: "compra de SMLL", hedge: "vendido em DI", sinal_confirmacao: "comunicado dovish", sinal_invalidacao: "comunicado hawkish" },
-    { nome: "bear", probabilidade_pct: 25, gatilhos_observaveis: ["dolar acima de 5.30"], vencedores: ["exportadoras", "VALE3"], perdedores: ["consumo domestico"], operacao_preferida: "compra de VALE3", hedge: "vendido em IBOV", sinal_confirmacao: "DXY acima de 107", sinal_invalidacao: "DXY abaixo de 104" },
-    { nome: "cisne_cinza", probabilidade_pct: 5, gatilhos_observaveis: ["crise fiscal aguda"], vencedores: ["ouro", "dolar"], perdedores: ["bolsa BR", "DI longo"], operacao_preferida: "compra de ouro", hedge: "nao aplicavel", sinal_confirmacao: "CDS Brasil acima de 300", sinal_invalidacao: "anuncio de medidas fiscais" },
+    {
+      nome: "base",
+      probabilidade_pct: 0,
+      gatilhos_observaveis: ["<<gatilho observável>>"],
+      vencedores: ["<<ativo que ganha>>"],
+      perdedores: ["<<ativo que perde>>"],
+      operacao_preferida: "<<operação preferida no cenário>>",
+      hedge: "<<hedge do cenário>>",
+      sinal_confirmacao: "<<sinal que confirma>>",
+      sinal_invalidacao: "<<sinal que invalida>>",
+    },
+    { nome: "bull", probabilidade_pct: 0, gatilhos_observaveis: ["<<gatilho>>"], vencedores: ["<<ativo>>"], perdedores: ["<<ativo>>"], operacao_preferida: "<<operação>>", hedge: "<<hedge>>", sinal_confirmacao: "<<sinal>>", sinal_invalidacao: "<<sinal>>" },
+    { nome: "bear", probabilidade_pct: 0, gatilhos_observaveis: ["<<gatilho>>"], vencedores: ["<<ativo>>"], perdedores: ["<<ativo>>"], operacao_preferida: "<<operação>>", hedge: "<<hedge>>", sinal_confirmacao: "<<sinal>>", sinal_invalidacao: "<<sinal>>" },
+    { nome: "cisne_cinza", probabilidade_pct: 0, gatilhos_observaveis: ["<<gatilho>>"], vencedores: ["<<ativo>>"], perdedores: ["<<ativo>>"], operacao_preferida: "<<operação>>", hedge: "<<hedge>>", sinal_confirmacao: "<<sinal>>", sinal_invalidacao: "<<sinal>>" },
   ],
   rastreabilidade: {
-    fatos_verificados: ["SELIC em 14.25%", "USDBRL em 5.07"],
-    interpretacoes: ["mercado precifica corte em setembro"],
-    hipoteses: ["fiscal nao piora antes de outubro"],
-    dados_incompletos: ["fluxo estrangeiro na B3 de julho"],
+    fatos_verificados: ["<<fato lido direto do snapshot>>"],
+    interpretacoes: ["<<leitura sua sobre o fato>>"],
+    hipoteses: ["<<aposta não verificável hoje>>"],
+    dados_incompletos: ["<<o que faltou no snapshot>>"],
   },
 };
 
@@ -307,6 +350,104 @@ export function parseStrategistContent(content: string): StrategistRaw {
   return StrategistRaw.parse(json);
 }
 
+/**
+ * Trechos que o prompt v2 mandava para o modelo e que ele devolvia verbatim. Não é lista de
+ * palavras proibidas: é a impressão digital de uma falha específica e medida em produção.
+ * Fica aqui para que uma regressão ao exemplo realista seja barrada mesmo se alguém reintroduzir
+ * o padrão sem ler o comentário do esqueleto.
+ */
+const IMPRESSOES_DIGITAIS_V2 = [
+  "Fed em compasso de espera enquanto fiscal brasileiro segue como risco principal",
+  "mercado precifica corte de 25bps na proxima reuniao do Copom",
+  "IPCA-15 acima de 0.5% ou comunicacao mais dura do BCB",
+  "Ibovespa descontado frente aos pares emergentes com expectativa de corte de juros no curto prazo",
+  "mercado subestima a velocidade de queda da Selic no segundo semestre",
+  "divergencia entre DI futuro e expectativa Focus abre janela de entrada antes do Copom",
+  "consenso ainda esta cauteloso com Brasil devido a ruido fiscal recente",
+  "piora fiscal pode anular efeito de corte de juros sobre multiples",
+  "fecha abaixo do suporte em 129000 pontos com volume acima da media",
+  "reduzir 50% no alvo_1, zerar no alvo_2 ou na invalidacao",
+  "call spread no IBOV para limitar risco de cauda fiscal",
+  "alta correlacao com curva de juros DI e DXY",
+  "ata do Copom sinalizando fim do ciclo de aperto",
+  "Compra de Ibovespa futuro",
+  "fiscal nao piora antes de outubro",
+  "fluxo estrangeiro na B3 de julho",
+  "mercado precifica corte em setembro",
+  "IPCA dentro do esperado",
+  "Copom sinaliza corte de 50bps",
+  "put IBOV OTM",
+  "taxa Selic meta atual",
+  "dolar spot PTAX",
+] as const;
+
+/**
+ * Frase longa o bastante para que a coincidência verbatim não seja acaso. Abaixo disso, uma
+ * ocorrência isolada pode ser análise legítima ("put IBOV OTM" é hedge que existe), então o
+ * critério passa a ser acúmulo.
+ */
+const ECHO_FRASE_LONGA = 40;
+const ECHO_MIN_CURTAS = 3;
+
+function normalizarTexto(s: string): string {
+  return s
+    .normalize("NFD")
+    // \p{M} = marcas combinantes. Depois do NFD, é o que sobra de acento separado da letra base.
+    // Property escape em vez de faixa literal: o arquivo fica ASCII aqui e não depende de encoding.
+    .replace(/\p{M}/gu, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function coletarStrings(v: unknown, out: string[] = []): string[] {
+  if (typeof v === "string") {
+    out.push(v);
+  } else if (Array.isArray(v)) {
+    for (const item of v) coletarStrings(item, out);
+  } else if (v !== null && typeof v === "object") {
+    for (const item of Object.values(v)) coletarStrings(item, out);
+  }
+  return out;
+}
+
+/**
+ * Detecta que a resposta é eco do prompt, não análise do snapshot. Devolve os motivos; lista
+ * vazia significa saída própria.
+ *
+ * Existe porque instrução de prompt não é mecanismo. O v2 pedia "siga o formato do exemplo" e o
+ * modelo entendeu "repita o exemplo" por três semanas sem nada acusar — o único motivo de nenhum
+ * trade fabricado ter sido publicado foi o gate de risco-retorno barrar 1.30 < 1.5 por sorte de
+ * calibragem. Detectar o eco na origem é mais barato que torcer para o gate seguinte pegar.
+ */
+export function detectPromptEcho(raw: StrategistRaw): string[] {
+  const motivos: string[] = [];
+  const textos = coletarStrings(raw);
+
+  for (const t of textos) {
+    if (t.includes("<<") || t.includes(">>")) {
+      motivos.push(`placeholder do esqueleto na saída: ${t.slice(0, 60)}`);
+    }
+  }
+
+  const proibidas = new Map(IMPRESSOES_DIGITAIS_V2.map((f) => [normalizarTexto(f), f]));
+  const curtas: string[] = [];
+  for (const t of textos) {
+    const original = proibidas.get(normalizarTexto(t));
+    if (!original) continue;
+    if (original.length >= ECHO_FRASE_LONGA) {
+      motivos.push(`frase verbatim do prompt v2: ${original.slice(0, 60)}`);
+    } else {
+      curtas.push(original);
+    }
+  }
+  if (curtas.length >= ECHO_MIN_CURTAS) {
+    motivos.push(`${curtas.length} trechos curtos do prompt v2 repetidos: ${curtas.join(" | ")}`);
+  }
+
+  return motivos;
+}
+
 export function sealStrategistTrades(raw: StrategistRaw, provenance: Provenance): TradeCard[] {
   return raw.trades.map((draft) => sealTradeCard(draft, crypto.randomUUID(), provenance));
 }
@@ -329,6 +470,8 @@ export interface RunStrategistResult {
   trades: TradeCard[];
   provenance: Provenance;
   model: string;
+  /** Motivos de eco do prompt. Vazio = saída própria. Ver `detectPromptEcho`. */
+  echo: string[];
 }
 
 export async function runStrategist(input: RunStrategistInput): Promise<RunStrategistResult> {
@@ -338,6 +481,10 @@ export async function runStrategist(input: RunStrategistInput): Promise<RunStrat
       await chatCompletion({
         apiKey: input.apiKey,
         model: input.model,
+        // A API da DeepSeek só garante `json_object`, sem schema estrito. Sem contrato de estrutura
+        // vindo do provedor, o modelo se apoiava no exemplo do prompt — que era justamente o que ele
+        // copiava. Mandar o schema no texto do system prompt devolve a referência de forma sem
+        // devolver a de conteúdo.
         responseFormatJson: input.deepseekApi ? true : false,
         responseFormatJsonSchema: input.deepseekApi ? undefined : {
           name: "MorningCallStrategist",
@@ -347,7 +494,10 @@ export async function runStrategist(input: RunStrategistInput): Promise<RunStrat
         maxTokens: 16000,
         deepseekApi: input.deepseekApi,
         messages: [
-          { role: "system", content: buildStrategistSystemPrompt() },
+          {
+            role: "system",
+            content: buildStrategistSystemPrompt({ incluirSchema: input.deepseekApi === true }),
+          },
           { role: "user", content: buildStrategistUserPrompt(input.snapshot) },
         ],
         fetchFn: input.fetchFn,
@@ -368,5 +518,6 @@ export async function runStrategist(input: RunStrategistInput): Promise<RunStrat
     trades,
     provenance,
     model: input.model,
+    echo: detectPromptEcho(raw),
   };
 }
