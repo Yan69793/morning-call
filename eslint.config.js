@@ -41,7 +41,16 @@ export default tseslint.config(
       // "not found by the project service" em bundle gerado — erro que não é código de ninguém,
       // e que só aparece depois que alguém roda o dev server.
       "**/dist/",
+      // `apps/morning-call/wrangler.toml` define `[assets] directory = "dist-assets"`, não "dist".
+      // Padrão diferente do resto do monorepo, então precisa da própria entrada aqui — sem isto o
+      // eslint tenta tipar o bundle do Vite como se fosse código-fonte nosso.
+      "**/dist-assets/",
       "**/.wrangler/",
+      // Worktree de tarefa em segundo plano (Agent isolation: "worktree"): checkout separado,
+      // sempre em `<raiz>/.claude/worktrees/<nome>/`, nunca aninhado — por isso sem `**/` na
+      // frente. Sem isto, `eslint .` também varre o snapshot de outra sessão, que pode estar num
+      // commit anterior ao daqui e reportar erro que já foi corrigido do lado de cá.
+      ".claude/worktrees/",
       "**/node_modules/",
       "**/coverage/",
       "eslint.config.js",

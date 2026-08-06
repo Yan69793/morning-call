@@ -115,7 +115,10 @@ function getRecurringEvents(tradeDate: string): RawScrapedEvent[] {
 export const fallbackProvider: AgendaProvider = {
   name: "fallback-estatico",
 
-  async fetch(ctx: AgendaProviderContext): Promise<RawScrapedEvent[]> {
+  // Sem `async`: não há nenhum `await` real aqui, os eventos vêm de tabela estática em memória.
+  // `Promise.resolve` no retorno satisfaz a interface `AgendaProvider` sem prometer uma espera
+  // que não existe.
+  fetch(ctx: AgendaProviderContext): Promise<RawScrapedEvent[]> {
     const tradeDate = ctx.tradeDate;
     const b3Open = isB3TradingDay(tradeDate);
     const nyseOpen = isNyseTradingDay(tradeDate);
@@ -162,6 +165,6 @@ export const fallbackProvider: AgendaProvider = {
       }),
     );
 
-    return events;
+    return Promise.resolve(events);
   },
 };

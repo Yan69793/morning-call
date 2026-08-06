@@ -151,7 +151,18 @@ export interface LatestReportRow {
   conviccao: number;
   n_trades: number;
   aprovado: boolean;
-  payload: string; // JSON: MorningCall
+  // O comentário antigo dizia "JSON: MorningCall", mas `saveReportPointer` grava
+  // { morningCall, validation, gateReasons, agenda }, não o MorningCall isolado.
+  // `ReportPayload` abaixo é o shape real; quem lê decide se faz `JSON.parse` cru ou tipado.
+  payload: string;
+}
+
+/** Shape real do JSON em `payload`, espelhando o que `saveReportPointer` recebe em `workflow.ts`. */
+export interface ReportPayload {
+  morningCall: unknown;
+  validation: unknown;
+  gateReasons: string[];
+  agenda: unknown;
 }
 
 /** Retorna o relatorio mais recente (maior trade_date) com status ok ou partial. */

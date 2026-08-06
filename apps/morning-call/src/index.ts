@@ -5,7 +5,7 @@ import type { Env } from "./env.js";
 import { todayTradeDateBrt } from "./data/calendar.js";
 import { isMarkCron } from "./cron.js";
 import { MorningCallWorkflow } from "./workflow.js";
-import { getLatestReport } from "./db/runs.js";
+import { getLatestReport, type ReportPayload } from "./db/runs.js";
 
 export type { Env };
 export { MorningCallWorkflow };
@@ -50,7 +50,10 @@ export default {
         if (!report) {
           return corsJson({ ok: false, error: "nenhum relatorio disponivel" }, { status: 404 });
         }
-        const payload = JSON.parse(report.payload);
+        // `report.payload` é escrito por `saveReportPointer` neste mesmo Worker (workflow.ts),
+        // não input externo. O cast documenta o shape em vez de deixar `any` correr solto pelo
+        // corpo da resposta — ver `ReportPayload` em db/runs.ts.
+        const payload = JSON.parse(report.payload) as ReportPayload;
         return corsJson({
           ok: true,
           trade_date: report.trade_date,

@@ -26,7 +26,10 @@ const FOREX_FACTORY_URL = "https://www.forexfactory.com/calendar";
  *   <td class="calendar__previous">0.25%</td>
  * </tr>
  */
-function parseHtml(html: string, tradeDate: string): RawScrapedEvent[] {
+// A pagina do ForexFactory nao tem filtro de data no HTML estatico que raspamos: ela sempre
+// devolve a semana corrente. `tradeDate` foi removido daqui por nunca ter sido usado no corpo;
+// quem chama continua logando `ctx.tradeDate` para correlacionar com o run.
+function parseHtml(html: string): RawScrapedEvent[] {
   const events: RawScrapedEvent[] = [];
 
   // Regex para extrair linhas da tabela de calendario
@@ -124,7 +127,10 @@ function parseQuantity(
   const value = parseFloat((numMatch[1] ?? "").replace(",", ""));
   if (isNaN(value)) return null;
 
-  let unit: QuantityUnit = "pct";
+  // Sem inicializador: o if/else if/else abaixo é exaustivo (o `else` final cobre o resto), então
+  // toda ramificação atribui `unit` antes do `return` — o "pct" inicial nunca sobrevivia para ser
+  // lido, só mascarava a mesma atribuição repetida na primeira condição.
+  let unit: QuantityUnit;
   const suffix = (numMatch[2] ?? "").trim().toUpperCase();
   if (suffix === "%" || suffix === "") unit = "pct";
   else if (suffix === "K") unit = "pct";
@@ -170,7 +176,7 @@ export const forexFactoryProvider: AgendaProvider = {
       }
 
       const html = await resp.text();
-      const events = parseHtml(html, ctx.tradeDate);
+      const events = parseHtml(html);
       console.log(
         JSON.stringify({
           event: "agenda_scrape_ff_ok",

@@ -60,6 +60,12 @@ __pycache__/
 # Resíduo de sessão de skill (mockups de brainstorm), não é produto.
 .superpowers/
 
+# Checkout isolado de tarefa em segundo plano (Agent isolation: "worktree"). É snapshot
+# descartável de outra sessão, não commit deste repo — a seção 3 liberaria o código-fonte lá
+# dentro do mesmo jeito que libera o nosso, sem esta linha um `git add -A` versionaria o branch
+# de trabalho de outra sessão junto com o principal.
+.claude/worktrees/
+
 # --- 4b) Segredos e ambiente -----------------------------------------
 # .env* e .dev.vars carregam FINNHUB_TOKEN, INGEST_SECRET etc. A seção 3
 # não os liberaria (sem extensão na allowlist), mas explicitar aqui é a

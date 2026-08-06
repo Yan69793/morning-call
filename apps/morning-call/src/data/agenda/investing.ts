@@ -11,9 +11,6 @@
 import type { RawScrapedEvent } from "../../schemas/agenda.js";
 import type { AgendaProvider, AgendaProviderContext } from "./types.js";
 
-const INVESTING_CALENDAR_URL =
-  "https://www.investing.com/economic-calendar/";
-
 function mapCountryToPais(country: string): RawScrapedEvent["pais"] {
   const lower = country.toLowerCase().trim();
   if (lower.includes("brazil") || lower.includes("brasil")) return "BR";
@@ -88,7 +85,11 @@ export const investingProvider: AgendaProvider = {
         return [];
       }
 
-      const body = (await resp.json()) as { data?: unknown[] };
+      // `Body.json<T>()` é genérico sem default: chamar `<T>()` aqui é o que fixa o tipo. Um `as`
+      // depois do call funcionaria também, mas o eslint acusaria assertion desnecessária, porque
+      // a assertion já alimenta a inferência do genérico por contexto, o que a torna redundante
+      // com ela mesma — o argumento explícito é a forma sem essa duplicidade.
+      const body = await resp.json<{ data?: unknown[] }>();
       if (!body.data || !Array.isArray(body.data)) return [];
 
       const events: RawScrapedEvent[] = [];
