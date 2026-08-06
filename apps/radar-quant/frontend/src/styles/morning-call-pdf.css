@@ -1,0 +1,528 @@
+/* ══════════════════════════════════════════════════════════════════════
+   Briefing PDF do Morning Call — tema-papel (Szuchmacher Consultoria).
+
+   Tokens copiados do sistema de design da casa, camada 2 do tema-papel
+   (Site/.claude/skills/sz-design). Ficam escopados em `.sz-pdf-root` de
+   proposito: a interface do Radar Quant roda em Tailwind com outra paleta,
+   e vazar `--bg`/`--text` para `:root` reescreveria a tela inteira.
+
+   Regras duras do sistema que este arquivo respeita:
+   raio zero, separacao por fio de 1px em vez de sombra, grid de fio de
+   cabelo (gap 1px sobre --line-strong), display sempre peso 400, mono so
+   como rotulo em caixa-alta com tracking, numero grande em serifa com
+   tabular-nums, dourado como acento e nunca como fundo de area grande.
+   ══════════════════════════════════════════════════════════════════════ */
+
+.sz-pdf-root {
+  /* tema-papel */
+  --bg: #f3f1ec;
+  --surface: #ebe7e0;
+  --surface-soft: #f8f6f2;
+  --text: #161c28;
+  --muted: #5c6574;
+  --accent: #8c6b3a;
+  --accent-text: #886839;
+  --accent-strong: #c4a46a;
+  --line: rgba(12, 21, 36, 0.09);
+  --line-strong: rgba(12, 21, 36, 0.14);
+
+  /* semaforo, uso restrito a dado e indicador de estado */
+  --pos: #5aad86;
+  --neg: #e08f8f;
+  --info: #6a96d4;
+  --warn: #d4885a;
+
+  --font-display: "Prata", Georgia, "Times New Roman", serif;
+  --font-body: "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", "Consolas", ui-monospace, monospace;
+  --tracking-label: 0.16em;
+
+  display: none;
+}
+
+/* ── Folha ────────────────────────────────────────────────────────── */
+
+.sz-pdf-sheet {
+  box-sizing: border-box;
+  width: 210mm;
+  height: 297mm;
+  padding: 9mm 11mm 7mm;
+  margin: 0 auto;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 9px;
+  line-height: 1.42;
+  display: flex;
+  flex-direction: column;
+  gap: 2.8mm;
+  overflow: hidden;
+}
+
+.sz-pdf-sheet *,
+.sz-pdf-sheet *::before,
+.sz-pdf-sheet *::after {
+  box-sizing: border-box;
+  border-radius: 0;
+}
+
+.sz-pdf-sheet p,
+.sz-pdf-sheet ul,
+.sz-pdf-sheet li,
+.sz-pdf-sheet h1,
+.sz-pdf-sheet h2,
+.sz-pdf-sheet h3 {
+  margin: 0;
+  padding: 0;
+}
+
+.sz-pdf-sheet ul {
+  list-style: none;
+}
+
+/* ── Tipografia de apoio ──────────────────────────────────────────── */
+
+.sz-pdf-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 6.6px;
+  font-weight: 500;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--accent-text);
+}
+
+.sz-pdf-label {
+  font-family: var(--font-mono);
+  font-size: 6.4px;
+  font-weight: 500;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.sz-pdf-num {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.028em;
+}
+
+.sz-pdf-muted {
+  color: var(--muted);
+}
+
+/* Teto de linha para os campos de texto livre do modelo. O limite de itens por
+   secao ja segura o grosso, mas um unico paragrafo longo demais ainda empurraria
+   o rodape para fora da folha. Cortar por linha degrada melhor que estourar.
+
+   `-webkit-line-clamp` so funciona junto de `display: -webkit-box`, e esse display
+   nao pode cair sobre um `<td>`: substitui `table-cell`, desmonta a linha e o teto
+   deixa de valer. Por isso o clamp mora sempre num elemento interno. */
+.sz-pdf-clamp-1,
+.sz-pdf-clamp-2,
+.sz-pdf-clamp-3 {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.sz-pdf-clamp-1 {
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+}
+
+.sz-pdf-clamp-2 {
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+.sz-pdf-clamp-3 {
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+}
+
+/* ── Cabecalho ────────────────────────────────────────────────────── */
+
+.sz-pdf-header {
+  border-top: 2px solid var(--accent);
+  padding-top: 2.6mm;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8mm;
+}
+
+.sz-pdf-title {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 22px;
+  line-height: 1.08;
+  letter-spacing: -0.028em;
+  margin-top: 1mm;
+}
+
+.sz-pdf-header-meta {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.sz-pdf-date {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.028em;
+  display: block;
+  margin-bottom: 0.8mm;
+}
+
+/* ── Faixa de estado, grid de fio de cabelo ───────────────────────── */
+
+.sz-pdf-strip {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1px;
+  background: var(--line-strong);
+  border: 1px solid var(--line-strong);
+}
+
+.sz-pdf-strip > div {
+  background: var(--surface-soft);
+  padding: 1.7mm 2.4mm;
+}
+
+.sz-pdf-strip-value {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.028em;
+  margin-top: 0.6mm;
+  display: block;
+}
+
+/* ── Secao ────────────────────────────────────────────────────────── */
+
+.sz-pdf-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1.4mm;
+}
+
+.sz-pdf-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4mm;
+  border-bottom: 1px solid var(--accent);
+  padding-bottom: 1mm;
+}
+
+.sz-pdf-lead {
+  font-size: 9.8px;
+  line-height: 1.45;
+}
+
+.sz-pdf-duo {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: var(--line-strong);
+  border: 1px solid var(--line-strong);
+}
+
+.sz-pdf-duo > div {
+  background: var(--surface-soft);
+  padding: 1.7mm 2.4mm;
+}
+
+/* ── Agenda ───────────────────────────────────────────────────────── */
+
+.sz-pdf-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.sz-pdf-table th {
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 6.2px;
+  font-weight: 500;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 0 2mm 1mm 0;
+  border-bottom: 1px solid var(--line-strong);
+}
+
+.sz-pdf-table td {
+  padding: 1.1mm 2mm 1.1mm 0;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+  font-size: 8.6px;
+  line-height: 1.34;
+}
+
+.sz-pdf-table tr:last-child td {
+  border-bottom: none;
+}
+
+.sz-pdf-hora {
+  font-family: var(--font-mono);
+  font-size: 8.4px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.sz-pdf-evento {
+  font-weight: 600;
+  display: block;
+}
+
+/* Marcador de importancia. Barra fina, nao preenchimento de area. */
+.sz-pdf-flag {
+  display: inline-block;
+  width: 2.2mm;
+  height: 1px;
+  vertical-align: middle;
+  margin-right: 1.2mm;
+  border-top: 2px solid var(--muted);
+}
+
+.sz-pdf-flag-alta {
+  border-top-color: var(--neg);
+}
+
+.sz-pdf-flag-media {
+  border-top-color: var(--warn);
+}
+
+.sz-pdf-flag-baixa {
+  border-top-color: var(--pos);
+}
+
+.sz-pdf-benigno {
+  color: var(--muted);
+}
+
+.sz-pdf-benigno strong {
+  color: var(--pos);
+  font-weight: 600;
+}
+
+.sz-pdf-adverso {
+  color: var(--muted);
+}
+
+.sz-pdf-adverso strong {
+  color: var(--neg);
+  font-weight: 600;
+}
+
+/* ── Cenarios ─────────────────────────────────────────────────────── */
+
+.sz-pdf-cenarios {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1px;
+  background: var(--line-strong);
+  border: 1px solid var(--line-strong);
+}
+
+.sz-pdf-cenario {
+  background: var(--surface-soft);
+  padding: 1.8mm 2mm;
+  display: flex;
+  flex-direction: column;
+  gap: 1mm;
+}
+
+.sz-pdf-cenario-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 2mm;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 1mm;
+}
+
+.sz-pdf-cenario-nome {
+  font-family: var(--font-mono);
+  font-size: 6.4px;
+  font-weight: 500;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+
+.sz-pdf-cenario-prob {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.028em;
+}
+
+.sz-pdf-list li {
+  display: flex;
+  gap: 1.4mm;
+  line-height: 1.38;
+}
+
+.sz-pdf-list li::before {
+  content: "";
+  flex: none;
+  width: 1.6mm;
+  margin-top: 1.5mm;
+  border-top: 1px solid var(--accent);
+}
+
+.sz-pdf-side {
+  font-size: 8.2px;
+  color: var(--muted);
+}
+
+.sz-pdf-side b {
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* ── Plano do pregao ──────────────────────────────────────────────── */
+
+.sz-pdf-trio {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: var(--line-strong);
+  border: 1px solid var(--line-strong);
+}
+
+.sz-pdf-trio > div {
+  background: var(--surface-soft);
+  padding: 2.2mm 2.6mm;
+  display: flex;
+  flex-direction: column;
+  gap: 1.2mm;
+}
+
+/* ── Operacoes ────────────────────────────────────────────────────── */
+
+.sz-pdf-trade {
+  display: flex;
+  align-items: baseline;
+  gap: 2.4mm;
+  padding: 1mm 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.sz-pdf-trade:last-child {
+  border-bottom: none;
+}
+
+.sz-pdf-trade-dir {
+  font-family: var(--font-mono);
+  font-size: 6.4px;
+  font-weight: 500;
+  letter-spacing: var(--tracking-label);
+  flex: none;
+  width: 13mm;
+}
+
+.sz-pdf-trade-dir-compra {
+  color: var(--pos);
+}
+
+.sz-pdf-trade-dir-venda {
+  color: var(--neg);
+}
+
+.sz-pdf-trade-nome {
+  font-weight: 600;
+  flex: none;
+  width: 38mm;
+}
+
+.sz-pdf-trade-niveis {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  flex: none;
+  width: 46mm;
+}
+
+.sz-pdf-trade-tese {
+  color: var(--muted);
+  flex: 1;
+  min-width: 0;
+}
+
+.sz-pdf-vazio {
+  border: 1px solid var(--line-strong);
+  padding: 2.6mm 3mm;
+  background: var(--surface-soft);
+}
+
+/* ── Rodape ───────────────────────────────────────────────────────── */
+
+.sz-pdf-footer {
+  margin-top: auto;
+  border-top: 1px solid var(--accent);
+  padding-top: 1.8mm;
+  display: flex;
+  flex-direction: column;
+  gap: 1mm;
+}
+
+.sz-pdf-footer-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 4mm;
+  font-family: var(--font-mono);
+  font-size: 6.2px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.sz-pdf-disclaimer {
+  font-size: 6.8px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+/* ── Impressao ────────────────────────────────────────────────────────
+   O app roda dentro de #root em layout de altura fixa com overflow
+   escondido. Em vez de tentar reaproveitar essa arvore na impressao, a
+   folha e montada num portal irmao de #root: aqui e so trocar qual dos
+   dois aparece. `print-color-adjust` e obrigatorio, senao o navegador
+   descarta o fundo papel e os fios e o PDF sai branco.
+   ────────────────────────────────────────────────────────────────────── */
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 0;
+  }
+
+  html,
+  body {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #fff !important;
+  }
+
+  body > #root {
+    display: none !important;
+  }
+
+  .sz-pdf-root {
+    display: block !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .sz-pdf-sheet {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    page-break-after: avoid;
+    page-break-inside: avoid;
+  }
+}

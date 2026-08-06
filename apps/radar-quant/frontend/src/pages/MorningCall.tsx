@@ -1,5 +1,12 @@
 import { useState, useEffect, useCallback } from "react";
-import type { MorningCallResponse, MorningCallReport, TradeCard, Scenario } from "../types/morningCall";
+import type {
+  MorningCallResponse,
+  MorningCallPayload,
+  MorningCallReport,
+  TradeCard,
+  Scenario,
+} from "../types/morningCall";
+import { MorningCallPdfButton, MorningCallPdfSheet } from "../components/MorningCallPdf";
 
 /* ------------------------------------------------------------------ */
 /* Labels & helpers                                                    */
@@ -482,8 +489,12 @@ export function MorningCall() {
     );
   }
 
-  // O payload em D1 e { morningCall, validation, gateReasons }
-  const mcReport = data?.ok && data.report ? (data.report as any).morningCall ?? data.report : null;
+  // O payload em D1 e { morningCall, validation, gateReasons, agenda }. O fallback
+  // para o proprio `report` cobre resposta que ja venha como MorningCallReport puro.
+  const payload = (data?.ok && data.report ? data.report : null) as MorningCallPayload | null;
+  const mcReport: MorningCallReport | null =
+    payload?.morningCall ?? (payload as MorningCallReport | null);
+  const agenda = payload?.agenda ?? null;
 
   if (!mcReport) {
     return (
@@ -523,14 +534,20 @@ export function MorningCall() {
   return (
     <div className="space-y-4 sm:space-y-6">
       {/* Cabecalho */}
-      <div>
-        <h1 className="text-base sm:text-lg font-semibold text-text-primary dark:text-dark-text-primary">
-          Morning Call
-        </h1>
-        <p className="text-[10px] sm:text-xs text-text-muted dark:text-dark-text-muted mt-0.5">
-          {report.trade_date} · {data?.n_trades ?? 0} trade{(data?.n_trades ?? 0) !== 1 ? "s" : ""} · {data?.aprovado ? "Aprovado" : "Parcial"}
-        </p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-base sm:text-lg font-semibold text-text-primary dark:text-dark-text-primary">
+            Morning Call
+          </h1>
+          <p className="text-[10px] sm:text-xs text-text-muted dark:text-dark-text-muted mt-0.5">
+            {report.trade_date} · {data?.n_trades ?? 0} trade{(data?.n_trades ?? 0) !== 1 ? "s" : ""} · {data?.aprovado ? "Aprovado" : "Parcial"}
+          </p>
+        </div>
+        <MorningCallPdfButton tradeDate={report.trade_date} />
       </div>
+
+      {/* Folha A4 do briefing. Fica escondida na tela e so aparece na impressao. */}
+      <MorningCallPdfSheet report={report} agenda={agenda} trades={rankedTrades} />
 
       {/* 1. Abertura Executiva */}
       <ExecutiveSummaryCard report={report} />

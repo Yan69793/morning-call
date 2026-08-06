@@ -3,6 +3,7 @@
  * Espelha apps/morning-call/src/schemas/report.ts e trade.ts.
  * Mantido local porque @sz/analytics cobre o dominio do radar, nao do relatorio.
  */
+import type { EconomicAgenda } from "./agenda";
 
 export interface ExecutiveSummary {
   tensao_macro_dominante: string;
@@ -108,6 +109,20 @@ export interface MorningCallReport {
   rastreabilidade: Traceability;
   provenance: Provenance;
   disclaimer: string;
+}
+
+/**
+ * Formato real do campo `report` da resposta. O worker grava
+ * `{ morningCall, validation, gateReasons, agenda }` em `reports.payload`
+ * (ver saveReportPointer em apps/morning-call/src/db/runs.ts), nao o
+ * MorningCallReport isolado. `agenda` fica null quando o calendario falha ou e
+ * reprovado, porque aquele passo e best-effort e nao derruba a rodada.
+ */
+export interface MorningCallPayload {
+  morningCall: MorningCallReport;
+  validation?: unknown;
+  gateReasons?: string[];
+  agenda?: EconomicAgenda | null;
 }
 
 export interface MorningCallResponse {
