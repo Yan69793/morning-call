@@ -211,3 +211,18 @@ spreads de crédito secundário, fluxo), não os tokens. Priorizar isso em `docs
    janelas diferentes e erra sem nenhum teste acusar. `Venue` e `WindowReturn.janela_as_of` já
    existem nos schemas para carregar a decisão; falta tomá-la e travar em teste. (Fase 2.)
 4. Calendário de feriados (B3 + NYSE): o cron não conhece feriado, a checagem é do primeiro step.
+
+---
+
+## AD-9: briefing-interno/ como consumidor Python externo ao workspace npm
+
+**Data:** 2026-08-09
+**Status:** decidido
+
+`briefing-interno/` é um pipeline Python 3.11 (stdlib, zero dependências) que roda via Windows Task Scheduler às 07h00 em dias úteis. Consome a API do Morning Call Worker como fonte de estado (junto com VixRadar e Radar Quant), gera um briefing HTML via OpenRouter, valida com um portão de 5 regras e envia por Resend.
+
+**Não é workspace npm.** Coexiste com o monorepo TypeScript sem acoplamento de runtime. O `.gitignore` foi atualizado para versionar `.py` e `.bat` (seção 3) e excluir `logs/`, `outputs/` e `__pycache__/` (seção 4e).
+
+**Dependência é unidirecional:** `briefing-interno/` → `morning-call` Worker. O Worker não sabe que o briefing existe. O contrato é o endpoint `GET /api/report/latest` (já documentado em `docs/DATA_SOURCES.md`).
+
+**Arquivos compartilhados:** `feriados-b3.json` (calendário B3 até 2027, fonte: calendário oficial BVMF + `apps/morning-call/src/agents/calendar.ts`) e `projetos-exposicao.json` (mapa de 15 projetos com exposições a mercado) vivem em `briefing-interno/` e são consumidos primariamente pelo pipeline Python.

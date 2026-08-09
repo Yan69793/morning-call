@@ -1,0 +1,92 @@
+{
+  "vixradar": {
+    "nome": "VixRadar",
+    "exposicao": ["copom", "selic", "spread de credito", "rating", "recuperacao judicial", "cvm"],
+    "porque": "103 emissores de renda fixa. Decisao de juros e evento de credito movem o risco da carteira monitorada.",
+    "endpoint_estado": "https://radar-credito-api.prospects-intel.workers.dev"
+  },
+  "morning-call": {
+    "nome": "Morning Call",
+    "exposicao": ["regime macro", "vies", "conviccao"],
+    "porque": "O relatorio matinal define regime, vies e conviccao. Tudo que altera a tese do dia impacta o material que sai para os clientes.",
+    "endpoint_estado": "https://morning-call.prospects-intel.workers.dev/api/report/latest"
+  },
+  "radar-quant": {
+    "nome": "Radar Quant",
+    "exposicao": ["ibovespa", "dolar", "juros futuros", "sp500", "vix", "commodities", "bitcoin", "acoes b3"],
+    "porque": "43 ativos monitorados diariamente (12 macro + 31 acoes B3). Todo movimento de preco dos ativos cobertos e relevante.",
+    "endpoint_estado": "https://radar-quant-brasil.prospects-intel.workers.dev/api/radar/latest"
+  },
+  "atlas": {
+    "nome": "ATLAS",
+    "exposicao": ["marcacao a mercado", "come-cotas", "ir sobre fundos", "taxa de juros"],
+    "porque": "Marcacao a mercado de titulos publicos e privados. Come-cotas, mudanca de IR sobre fundos e curva de juros afetam o portfolio diretamente.",
+    "endpoint_estado": null
+  },
+  "fechamento-diario": {
+    "nome": "Fechamento Diario e Site",
+    "exposicao": ["volatilidade", "agenda macro", "fluxo de consultoria"],
+    "porque": "Volatilidade puxa demanda de consultoria. Agenda macro define pauta do relatorio. Mercado parado e mercado em crise ambos afetam o negocio.",
+    "endpoint_estado": null
+  },
+  "mercado-de-apostas": {
+    "nome": "Mercado de Apostas",
+    "exposicao": ["regulacao lei 14.790", "congresso", "ministerio da fazenda", "spa"],
+    "porque": "Projeto depende inteiro do avanco regulatorio da Lei 14.790. Cada movimento no Congresso ou na SPA muda o cenario.",
+    "endpoint_estado": null
+  },
+  "plataforma-carreira": {
+    "nome": "Plataforma de Carreira Executiva",
+    "exposicao": ["demissao em massa", "fusao e aquisicao", "resultado corporativo"],
+    "porque": "O produto vende para executivo em transicao. Onda de demissao ou fusao cria demanda. Resultado corporativo ruim antecipa reestruturacao.",
+    "endpoint_estado": null
+  },
+  "jornada-interior": {
+    "nome": "Jornada Interior",
+    "exposicao": ["usd/brl"],
+    "porque": "Royalties da Amazon KDP sao pagos em dolar. Cambio muda a receita em real sem nenhuma acao do projeto.",
+    "endpoint_estado": null
+  },
+  "meu-assessor": {
+    "nome": "Meu Assessor",
+    "exposicao": ["open finance", "regulacao bcb", "pix"],
+    "porque": "Produto de assessoria financeira. Open Finance, regulacao do BCB e evolucao do Pix definem o terreno onde o produto opera.",
+    "endpoint_estado": null
+  },
+  "multiasset-supabase": {
+    "nome": "MultiAsset-Supabase",
+    "exposicao": ["infraestrutura de portfolio"],
+    "porque": "Peca de infraestrutura do portfolio. Exposicao indireta via projetos que dependem dele.",
+    "endpoint_estado": null
+  },
+  "jarvis": {
+    "nome": "Jarvis",
+    "exposicao": [],
+    "porque": "Assistente pessoal local. Sem exposicao a mercado. Nao relacionar.",
+    "endpoint_estado": null
+  },
+  "graphify": {
+    "nome": "graphify",
+    "exposicao": [],
+    "porque": "Ferramenta open-source de knowledge graph. Sem exposicao a mercado. Nao relacionar.",
+    "endpoint_estado": null
+  },
+  "agente-yan": {
+    "nome": "Agente Yan",
+    "exposicao": [],
+    "porque": "Automacao pessoal. Sem exposicao a mercado. Nao relacionar.",
+    "endpoint_estado": null
+  },
+  "tapetier": {
+    "nome": "Tapetier",
+    "exposicao": [],
+    "porque": "Projeto pessoal. Sem exposicao a mercado. Nao relacionar.",
+    "endpoint_estado": null
+  },
+  "szuchmacher-ia": {
+    "nome": "Szuchmacher IA",
+    "exposicao": [],
+    "porque": "Infraestrutura de IA institucional. Sem exposicao direta a mercado. Nao relacionar.",
+    "endpoint_estado": null
+  }
+}

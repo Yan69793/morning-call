@@ -1,0 +1,17 @@
+# Briefing Matinal — gitignore
+
+# Ambiente
+.env
+
+# Artefatos gerados
+outputs/
+logs/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Windows
+Thumbs.db
+Desktop.ini
