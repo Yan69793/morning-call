@@ -37,6 +37,8 @@
 !*.sh
 !*.ps1
 !*.pine
+!*.py
+!*.bat
 !.gitignore
 !.gitattributes
 !.dev.vars.example
@@ -101,7 +103,12 @@ apps/radar-quant/scripts/out/
 *.gif
 *.webp
 
-# --- 4e) OS e temporários --------------------------------------------
+# --- 4e) Briefing interno — logs, outputs e cache --------------------
+briefing-interno/logs/
+briefing-interno/outputs/
+briefing-interno/__pycache__/
+
+# --- 4f) OS e temporários --------------------------------------------
 .DS_Store
 Thumbs.db
 desktop.ini
