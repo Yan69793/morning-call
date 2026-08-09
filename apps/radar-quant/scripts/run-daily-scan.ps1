@@ -77,8 +77,12 @@ try {
     }
 
     Log 'Scan diario concluido com sucesso.'
-    return 0
+    # exit (nao return): e o unico jeito do processo powershell.exe devolver um
+    # codigo que o Task Scheduler registra como LastTaskResult. Excecao
+    # deliberada a regra geral do projeto, justificada pelo contrato deste
+    # script especifico com o Task Scheduler.
+    exit 0
 } catch {
     Log "ERRO FATAL: $($_.Exception.Message)"
-    return 1
+    exit 1
 }

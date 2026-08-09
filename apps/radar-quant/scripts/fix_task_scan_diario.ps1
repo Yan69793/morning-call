@@ -1,4 +1,12 @@
 <#
+  SUPERADO em 2026-08-06: a task voltou a sumir do Task Scheduler por volta de
+  07-24 (provavel reboot nao investigado, ver AI_OPERATING_SYSTEM/06), 15 dias
+  sem coletar sem ninguem notar. Recriada apontando pro powershell.exe puro
+  (Windows PowerShell 5.1), nao mais pro alias WindowsApps do pwsh que este
+  script aplica abaixo. Caminho recomendado agora e
+  register-scan-diario-task.ps1, neste mesmo diretorio. Este arquivo fica
+  como registro historico do primeiro incidente (07-16 a 07-21), nao apague.
+
   Corrige a Action da tarefa RadarQuant-ScanDiario.
 
   CAUSA RAIZ (medida em 2026-07-21, nao presumida):
