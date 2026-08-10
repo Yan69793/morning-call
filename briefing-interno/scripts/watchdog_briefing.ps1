@@ -7,7 +7,7 @@
 # ASCII puro: roda via powershell.exe 5.1.
 
 $ErrorActionPreference = 'Continue'
-$ProjectRoot = 'E:\Diretorio\Claude\Morning Call\briefing-interno'
+$ProjectRoot = Split-Path -Parent $PSScriptRoot
 $DateTag = Get-Date -Format 'yyyyMMdd'
 $LogDir = Join-Path $ProjectRoot 'logs'
 $LogFile = Join-Path $LogDir "briefing_$DateTag.log"

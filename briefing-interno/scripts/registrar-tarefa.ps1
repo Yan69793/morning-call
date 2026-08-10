@@ -8,7 +8,7 @@
 # O registro so acontece com confirmacao explicita.
 
 $ErrorActionPreference = 'Continue'
-$ProjectRoot = 'E:\Diretorio\Claude\Morning Call\briefing-interno'
+$ProjectRoot = Split-Path -Parent $PSScriptRoot
 $ScriptDir = Join-Path $ProjectRoot 'scripts'
 $LauncherPath = Join-Path $ScriptDir 'launcher_briefing.ps1'
 $WatchdogPath = Join-Path $ScriptDir 'watchdog_briefing.ps1'

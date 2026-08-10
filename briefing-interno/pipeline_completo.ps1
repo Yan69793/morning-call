@@ -1,7 +1,7 @@
 # pipeline_completo.ps1 — Briefing Matinal: gerar, validar, enviar
 # Uso: pwsh -File pipeline_completo.ps1
 $ErrorActionPreference = 'Continue'
-$ProjectRoot = 'E:\Diretorio\Claude\Morning Call\briefing-interno'
+$ProjectRoot = $PSScriptRoot
 Set-Location $ProjectRoot
 
 Write-Host "=== Briefing Matinal - Pipeline Completo ===" -ForegroundColor Cyan
