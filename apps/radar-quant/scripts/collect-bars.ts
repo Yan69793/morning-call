@@ -16,7 +16,10 @@ import { fileURLToPath } from 'node:url'
 const __dir = dirname(fileURLToPath(import.meta.url))
 
 const HOST = 'localhost'
-const PORT = 9222
+// CDPPORT1: 9222 é o padrão de qualquer Chromium, então colide com navegador
+// aberto (o Brave derrubou o scan de 10/08). run-daily-scan.ps1 escolhe a
+// primeira porta livre e passa em CDP_PORT. 9222 fica só como padrão de uso manual.
+const PORT = Number(process.env.CDP_PORT ?? 9222)
 const CHART_API = 'window.TradingViewApi._activeChartWidgetWV.value()'
 const BARS_PATH = `${CHART_API}._chartWidget.model().mainSeries().bars()`
 const COUNT = 130
