@@ -36,25 +36,40 @@ Voce e um analista de mercado senior escrevendo um briefing matinal interno para
 REGRAS ABSOLUTAS:
 1. Toda chamada direcional ("tende a subir", "deve cair", "vai valorizar") PRECISA citar fonte_url.
    A fonte_url TEM que estar no pool de noticias fornecido. Fonte fora do pool e alucinacao.
+   Copie a URL EXATAMENTE como esta no pool, caractere por caractere, mantendo https://,
+   o dominio original e o final do caminho. Nao encurte, nao troque dominio, nao invente
+   extensao (.ghtml). URL errada e pior que nenhuma URL.
 2. Toda chamada direcional PRECISA declarar confianca entre 0.0 e 1.0.
    confianca alta (0.7+) = multiplas fontes confirmam. confianca baixa (0.3-) = fonte unica ou correlacao incerta.
 3. NUNCA cite um projeto que nao esta na lista de projetos fornecida.
    NUNCA cite um projeto com exposicao vazia ([]). Esses projetos NAO TEM relacao com mercado.
-4. Se o Radar Quant estiver marcado como STALE, e o dado tiver >= 2 dias de atraso,
-   NAO inclua a secao do Radar Quant. Avise que o scan esta fora do ar.
-5. Briefing sem nenhuma chamada direcional e invalido. Encontre pelo menos uma leitura relevante.
+   NUNCA cite Morning Call nem Radar Quant como projetos: em 13/08 o Yan tirou
+   as secoes de dados dos dois do briefing, e a leitura por projeto deles tambem saiu.
+4. Briefing sem nenhuma chamada direcional e invalido. Encontre pelo menos uma leitura relevante.
 
 FORMATO DO BRIEFING (HTML):
 - Estrutura limpa, sem CSS externo, self-contained.
+- Formato dos bancos globais (pesquisado em 13/08 no Deutsche Bank, Bloomberg e
+  Goldman): poucos blocos, cada um com titulo em negrito, 2-3 frases densas em
+  numero exato com comparacao historica ("melhor semana desde 2008"), e a ultima
+  frase diz por que importa para o mercado. Sem lista de recomendacao, sem secao
+  de ferramentas, sem projetos internos.
 - Secoes:
-  1. RESUMO — 3-5 linhas com o quadro geral do dia. O que importa agora.
-  2. O QUE TENDE A SUBIR — Chamadas direcionais de alta, com fonte_url e confianca.
-  3. O QUE TENDE A DESCER — Chamadas direcionais de baixa, com fonte_url e confianca.
-  4. LEITURA POR PROJETO — Um paragrafo por projeto COM exposicao. Conectar noticia ao impacto.
-     So incluir projeto com exposicao preenchida. Pular os de exposicao vazia.
-  5. RADAR QUANT — Dados do scan. Se stale >= 2 dias: "Scan fora do ar ha X dias. Dados abaixo via Yahoo Finance (fallback)."
-  6. MORNING CALL — Regime, vies, conviccao do dia.
-  7. AGENDA DO DIA — O que acompanhar hoje.
+  1. RESUMO — 2-3 frases com o fechamento dos mercados e o quadro do dia.
+  2. O QUE IMPORTA HOJE — 3 a 5 pontos numerados. Cada ponto comeca com
+     <b>Titulo do evento ou movimento.</b> Em seguida 2-3 frases com numeros
+     exatos e comparacao historica, e a ultima frase diz por que importa
+     (efeito em preco, taxa, spread ou dolar). A chamada direcional fica
+     embutida na prosa, com fonte_url e confianca declarada, nunca como
+     recomendacao de compra ou venda. OBRIGATORIO: cada ponto precisa de pelo
+     menos uma frase com leitura direcional explicita no padrao "tende a
+     subir/cair", "deve pressionar", "vies de alta/baixa" ou "pressao de
+     alta/baixa", porque o validador reprova briefing sem chamada direcional.
+     A fonte vai como link <a href="URL">Fonte: Veiculo</a> no fim do ponto.
+  3. AGENDA DO DIA — Somente os eventos do bloco AGENDA DO DIA fornecido no
+     prompt, com horario e fonte. Se o bloco disser que nao ha evento
+     confirmado, escreva "Sem eventos de agenda confirmados para hoje".
+     NUNCA invente evento de agenda, nem recupere de memoria.
 
 TON: direto, analitico, sem firula. Nao e relatorio institucional, e briefing interno.
 Nao use marcadores de IA ("vale notar que", "pode-se argumentar"). Vá direto ao ponto.
@@ -89,6 +104,35 @@ def _openrouter_url(env: dict[str, str]) -> str:
     return env.get("OPENROUTER_URL", "").strip() or os.environ.get("OPENROUTER_URL", "").strip() or DEFAULT_OPENROUTER_URL
 
 
+# Agenda real da casa, mantida pelo Szuchmacher-AgendaAgent (task das 08h00
+# de segunda a sexta). Em 13/08 o modelo inventou CPI e reuniao do BRICS na
+# agenda; desde entao a agenda entra pronta no prompt, igual ao Fechamento.
+AGENDA_PATH = ROOT.parent.parent / "Site" / "site-producao" / "agenda-data.json"
+
+
+def _bloco_agenda(data_tag: str) -> str:
+    """Bloco de agenda real do dia para o prompt. Vazio se nao houver
+    eventos confirmados, e o modelo recebe instrucao de nao inventar."""
+    agenda = _load_json(AGENDA_PATH)
+    linhas: list[str] = []
+    if agenda:
+        hoje = data_tag[:4] + "-" + data_tag[4:6] + "-" + data_tag[6:]
+        eventos = [e for e in agenda.get("eventos", []) if e.get("data") == hoje]
+        eventos.sort(key=lambda e: (e.get("hora_brt") or "", e.get("evento") or ""))
+        for e in eventos:
+            hora = e.get("hora_brt") or ""
+            linhas.append(
+                f"- {hora} ({e.get('regiao', '?')}): {e.get('evento', '?')} "
+                f"[{e.get('fonte', '?')}]"
+            )
+    if not linhas:
+        linhas.append(
+            "- NENHUM evento confirmado para hoje na fonte oficial da casa. "
+            "Escreva 'Sem eventos de agenda confirmados para hoje' e nao invente."
+        )
+    return "=== AGENDA DO DIA (dados oficiais, use SOMENTE estes eventos) ===\n" + "\n".join(linhas)
+
+
 def _build_user_prompt(
     noticias: dict,
     estado: dict,
@@ -110,6 +154,10 @@ def _build_user_prompt(
         if item.get("published"):
             partes.append(f"    Data: {item['published']}")
         partes.append("")
+
+    # Agenda oficial do dia
+    partes.append(_bloco_agenda(data_tag))
+    partes.append("")
 
     # Estado dos sistemas
     sistemas = estado.get("sistemas", {})

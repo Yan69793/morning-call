@@ -48,8 +48,32 @@ DIRECTIONAL_PATTERNS = [
     re.compile(r"vi[eé]s\s+(altista|baixista|positivo|negativo|de\s+alta|de\s+baixa)", re.IGNORECASE),
 ]
 
-# Regex para encontrar URLs no HTML
-URL_PATTERN = re.compile(r'https?://[^\s<>"\']+')
+# Regex para encontrar URLs no HTML (para nos colchetes das citacoes)
+URL_PATTERN = re.compile(r'https?://[^\s<>"\'\[\]]+')
+
+# Citacoes entre colchetes, sem esquema (o modelo costuma citar "[dominio/caminho]")
+CITATION_PATTERN = re.compile(r"\[([^\[\]]+)\]")
+
+# Domínios internos que nao contam como fonte de noticia
+INTERNAL_DOMAINS = ("szuchmacher.com.br", "localhost", "127.0.0.1")
+
+
+def _normalize_url(u: str) -> str | None:
+    """Normaliza para host + caminho, sem esquema, sem www e sem barra final.
+
+    Retorna None se nao parecer URL.
+    """
+    u = u.strip().rstrip(".").rstrip(")")
+    if not u.startswith("http"):
+        u = "https://" + u
+    m = re.match(r"https?://([^/?#]+)(/[^?#]*)?", u)
+    if not m:
+        return None
+    host = m.group(1).lower()
+    if host.startswith("www."):
+        host = host[4:]
+    path = (m.group(2) or "/").rstrip("/")
+    return f"{host}{path}"
 
 # Regex para confianca declarada
 CONFIANCA_PATTERN = re.compile(r'confian[cç]a\s*[:=]?\s*(\d+[.,]\d+)', re.IGNORECASE)
@@ -115,36 +139,29 @@ def _find_project_mentions(html: str) -> set[str]:
 
 
 def _check_radar_quant_staleness(html: str, estado: dict) -> tuple[bool, str]:
-    """Verifica regra 4: se Radar Quant stale >= 2 dias, secao deve estar suprimida.
+    """REGRA 4 neutralizada em 13/08/2026.
 
-    Retorna (ok, mensagem).
+    O Yan tirou a secao RADAR QUANT do briefing, entao nao ha mais secao
+    para exigir aviso de indisponibilidade. A checagem antiga fica abaixo,
+    em comentario, para o caso de a secao voltar:
+
+        rq = estado.get("sistemas", {}).get("radar-quant", {})
+        staleness = rq.get("staleness", {})
+        if not staleness.get("stale"):
+            return True, "Radar Quant fresco, nenhuma acao necessaria"
+        dias = staleness.get("dias_consecutivos", 0)
+        if dias < 2:
+            return True, f"Radar Quant stale ha {dias} dia(s), abaixo do limite de 2"
+        text = re.sub(r"<[^>]+>", " ", html).lower()
+        indicadores = ["fora do ar", "indisponivel", "scan suspenso",
+                       "scan fora do ar", "dados indisponiveis",
+                       "yahoo finance", "fallback", "nao esta disponivel"]
+        for indicador in indicadores:
+            if indicador in text:
+                return True, f"Radar Quant stale ({dias}d), aviso de indisponibilidade detectado"
+        return False, "Radar Quant stale ha dias consecutivos, mas secao NAO foi suprimida"
     """
-    rq = estado.get("sistemas", {}).get("radar-quant", {})
-    staleness = rq.get("staleness", {})
-    if not staleness.get("stale"):
-        return True, "Radar Quant fresco, nenhuma acao necessaria"
-
-    dias = staleness.get("dias_consecutivos", 0)
-    if dias < 2:
-        return True, f"Radar Quant stale ha {dias} dia(s), abaixo do limite de 2"
-
-    # Deve ter aviso de indisponibilidade
-    text = re.sub(r"<[^>]+>", " ", html).lower()
-    indicadores = [
-        "fora do ar",
-        "indisponivel",
-        "scan suspenso",
-        "scan fora do ar",
-        "dados indisponiveis",
-        "yahoo finance",
-        "fallback",
-        "nao esta disponivel",
-    ]
-    for indicador in indicadores:
-        if indicador in text:
-            return True, f"Radar Quant stale ({dias}d), aviso de indisponibilidade detectado: '{indicador}'"
-
-    return False, f"Radar Quant stale ha {dias} dias consecutivos, mas secao NAO foi suprimida nem traz aviso de indisponibilidade"
+    return True, "Secao Radar Quant removida do briefing (decisao 13/08), staleness nao se aplica"
 
 
 def main(argv: list[str]) -> int:
@@ -168,40 +185,52 @@ def main(argv: list[str]) -> int:
     estado = _load_json(LOG_DIR / f"estado_{data_tag}.json")
     exposicao = _load_json(ROOT / "projetos-exposicao.json")
 
-    # Pool de URLs das noticias
-    url_pool: set[str] = set()
+    # Pool de URLs das noticias, normalizado (host + caminho)
+    url_pool_norm: set[str] = set()
     if noticias:
         for item in noticias.get("itens", []):
             if item.get("url"):
-                url_pool.add(item["url"])
+                n = _normalize_url(item["url"])
+                if n:
+                    url_pool_norm.add(n)
 
     problemas: list[str] = []
     avisos: list[str] = []
+    urls_fora_do_pool: list[str] = []
 
     # === Regra 1: fonte_url no pool ===
     direcionais = _find_directional_paragraphs(html)
     urls_no_html = _extract_urls(html)
+    # Citacoes entre colchetes tambem contam (o modelo cita sem esquema).
+    # So entram na checagem as que parecem URL, para nao punir texto comum.
+    citacoes_url = {
+        c for c in CITATION_PATTERN.findall(html)
+        if re.match(r"^[a-zA-Z0-9./-]+\.[a-z]{2,}(/|$)", c.strip())
+    }
 
     if not direcionais:
         problemas.append("REGRA 5: Nenhuma chamada direcional encontrada. Briefing vazio.")
     else:
         print(f"OK: {len(direcionais)} chamada(s) direcional(is) encontrada(s)")
 
-        # Verifica se cada chamada direcional tem uma fonte_url por perto
-        # Heuristica: se tem URLs no HTML que nao estao no pool, e suspeito
-        urls_fora_do_pool = urls_no_html - url_pool
-        # Remove URLs que nao sao de noticia (ex.: links internos, szuchmacher.com.br)
-        urls_fora_do_pool = {
-            u for u in urls_fora_do_pool
-            if not any(d in u for d in ["szuchmacher.com.br", "localhost", "127.0.0.1"])
-        }
+        # Cada URL ou citacao precisa bater com um item do pool por host + caminho.
+        # Em 13/08 o modelo citou "g1.globo.com/mundo/.../teera.ghtml", misturando
+        # dominio do G1 com o caminho de uma noticia da Infomoney e inventando a
+        # extensao. A checagem por substring deixava passar e o link dava 404.
+        urls_fora_do_pool = []
+        for u in urls_no_html | citacoes_url:
+            if any(d in u for d in INTERNAL_DOMAINS):
+                continue
+            n = _normalize_url(u)
+            if n is None or n not in url_pool_norm:
+                urls_fora_do_pool.append(u)
         if urls_fora_do_pool:
             problemas.append(
                 f"REGRA 1: {len(urls_fora_do_pool)} URL(s) no briefing nao estao no pool de noticias: "
                 + ", ".join(sorted(urls_fora_do_pool)[:5])
             )
         else:
-            print(f"OK: {len(urls_no_html)} URL(s) no briefing, todas no pool de noticias")
+            print(f"OK: {len(urls_no_html)} URL(s) e {len(citacoes_url)} citacao(oes) no briefing, todas no pool de noticias")
 
     # === Regra 2: confianca declarada ===
     confiancas = CONFIANCA_PATTERN.findall(html)
@@ -255,7 +284,7 @@ def main(argv: list[str]) -> int:
             "n_direcionais": len(direcionais),
             "n_confiancas": len(confiancas),
             "n_urls_no_html": len(urls_no_html),
-            "n_urls_fora_pool": len(urls_fora_do_pool) if 'urls_fora_do_pool' in dir() else 0,
+            "n_urls_fora_pool": len(urls_fora_do_pool),
         }, ensure_ascii=False, indent=2), encoding="utf-8")
 
         return 1

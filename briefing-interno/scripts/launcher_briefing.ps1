@@ -75,10 +75,13 @@ Write-Host $pwshLine
 # Executa o script principal como processo filho usando pwsh.exe.
 $mainExit = 99
 try {
+    # O caminho do projeto contem espaco ("Morning Call"). Na juncao de array do
+    # Start-Process -ArgumentList o caminho vira dois argumentos e o pwsh recebe
+    # -File truncado. O argumento do -File precisa ir entre aspas duplas.
     $proc = Start-Process -FilePath $PwshExe -ArgumentList @(
         '-NoProfile',
         '-ExecutionPolicy', 'Bypass',
-        '-File', $MainScript
+        '-File', ('"' + $MainScript + '"')
     ) -Wait -PassThru -NoNewWindow
     $mainExit = $proc.ExitCode
 } catch {

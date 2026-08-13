@@ -23,7 +23,7 @@ function Log($msg) {
     Add-Content -Path $LogFile -Value $line -Encoding UTF8
 }
 
-function Run-Python($script, $args = @()) {
+function Run-Python($script, $extraArgs = @()) {
     $py = (Get-Command python -ErrorAction SilentlyContinue).Source
     if (-not $py) { $py = (Get-Command python3 -ErrorAction SilentlyContinue).Source }
     if (-not $py) {
@@ -31,8 +31,18 @@ function Run-Python($script, $args = @()) {
         return 99
     }
 
-    $cmdArgs = @($script) + $args
-    $proc = Start-Process -FilePath $py -ArgumentList $cmdArgs `
+    # O parametro nao pode se chamar $args: $args e a variavel automatica do
+    # PowerShell para argumentos posicionais nao vinculados, e o segundo
+    # argumento da chamada nunca chegava aqui. Em 13/08 o validador rodou sem
+    # o caminho do HTML e o portao reprovou o envio por isso.
+    if (-not $extraArgs) { $extraArgs = @() }
+
+    $cmdArgs = @($script) + $extraArgs
+    # Caminhos com espaco ("Morning Call") quebram na juncao de array do
+    # Start-Process -ArgumentList: o caminho vira dois argumentos e o python
+    # recebe um path truncado. Cada argumento vai entre aspas duplas.
+    $argString = ($cmdArgs | ForEach-Object { '"' + $_ + '"' }) -join ' '
+    $proc = Start-Process -FilePath $py -ArgumentList $argString `
         -Wait -PassThru -NoNewWindow `
         -RedirectStandardOutput (Join-Path $LogDir "stdout_${DateTag}.tmp") `
         -RedirectStandardError (Join-Path $LogDir "stderr_${DateTag}.tmp")
