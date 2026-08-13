@@ -105,6 +105,19 @@ Duas decisoes do Yan no mesmo dia, tambem so visuais: a citacao de fonte (colche
 - A agenda do dia agora vem pronta no prompt, lida de `Site\site-producao\agenda-data.json` (funcao `_bloco_agenda`), mantida pelo Szuchmacher-AgendaAgent das 08h00. O modelo nao pode mais inventar evento de agenda: sem evento confirmado na fonte, escreve "Sem eventos de agenda confirmados para hoje". Em 13/08 ele tinha inventado CPI, discurso do Fed e reuniao do BRICS.
 - O modelo costuma trocar pedacos de URL (dominio ou data). O validador compara host e caminho normalizados contra o pool e reprova. Corrigir a citacao no arquivo quando acontecer, nao afrouxar a regra.
 
+## Teste de um dia: envio a clientes em 14/08/2026
+
+Decisao do Yan em 13/08: so no dia 14/08, o briefing sai tambem para a lista de clientes do Fechamento, as 10h00, e somente depois de o Yan validar o material das 07h00. Fluxo:
+
+1. 07h00: briefing sai para o Yan normalmente (a task das 07h agora tem WakeToRun, ver pendencia abaixo)
+2. Yan valida o e-mail e aprova no chat; o Claude cria `logs/aprovacao_clientes_20260814.flag`
+3. 10h00: a task unica `Szuchmacher-EnvioClientes` roda `run_envio_clientes.ps1`, que envia o MESMO HTML via `enviar_briefing.py --clientes` (BCC real com a lista do `.env` do Fechamento) e se auto-remove
+4. Sem o flag: nada sai, fica `CLIENTES: SEM APROVACAO` no log, e a task se auto-remove do mesmo jeito
+
+O modo `--clientes` exige o flag de aprovacao (falha fechada, testado em 13/08), le o `.env` do Fechamento para FROM_EMAIL, RECIPIENT e BCC, e usa sentinela propria `sent_clientes_<data>.flag`. Nunca imprimir os enderecos em log ou saida.
+
+PENDENCIA de 13/08: o WakeToRun da `Szuchmacher-BriefingMatinal` nao foi aplicado, as duas tentativas de UAC nao foram aceitas. Rodar elevado `scripts/wakeup-briefing-ADMIN.ps1` e conferir `WakeToRun=True`. Sem isso, maquina suspensa as 07h00 continua atrasando o briefing.
+
 ## Envio avulso para outro destinatario
 
 `enviar_briefing.py` aceita `--to email@x.com` para mandar uma copia para outro endereco sem mexer no `.env`. A validacao e a sentinela de idempotencia continuam valendo. Pedido do Yan em 13/08 para revisar o material em outra caixa.

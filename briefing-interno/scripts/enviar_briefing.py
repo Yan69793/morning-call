@@ -31,8 +31,9 @@ UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
 RESEND_API = "https://api.resend.com/emails"
 
 
-def _load_env() -> dict[str, str]:
-    env_path = ROOT / ".env"
+def _load_env(env_path: Path | None = None) -> dict[str, str]:
+    if env_path is None:
+        env_path = ROOT / ".env"
     out: dict[str, str] = {}
     if not env_path.exists():
         return out
@@ -43,6 +44,10 @@ def _load_env() -> dict[str, str]:
         k, _, v = line.partition("=")
         out[k.strip()] = v.strip().strip('"').strip("'")
     return out
+
+
+# .env do Fechamento de Mercado, fonte da lista de clientes no modo --clientes
+FECHAMENTO_ENV = ROOT.parent.parent / "relatorio-diario-szuchmacher" / ".env"
 
 
 def _validar(html_path: Path, force: bool = False) -> bool:
@@ -433,8 +438,12 @@ def _send_resend(
     from_email: str,
     to_email: str,
     data_tag: str,
+    bcc_list: list[str] | None = None,
 ) -> bool:
     """Envia via Resend API (HTTP POST, nao SMTP).
+
+    Com bcc_list, o envio e BCC real: o to aponta para o proprio remetente
+    e a lista vai no campo bcc, para nenhum cliente ver o endereco do outro.
 
     Retorna True se enviado com sucesso.
     """
@@ -456,13 +465,16 @@ def _send_resend(
     styled = build_styled_email(html_content, data_fmt)
     plain = build_plain_text(html_content)
 
-    body = json.dumps({
+    payload = {
         "from": from_email,
-        "to": [to_email],
+        "to": [from_email if bcc_list else to_email],
         "subject": f"Briefing Matinal — {data_fmt}",
         "html": styled,
         "text": plain,
-    }, ensure_ascii=False).encode("utf-8")
+    }
+    if bcc_list:
+        payload["bcc"] = bcc_list
+    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
 
     req = urllib.request.Request(
         RESEND_API,
@@ -526,8 +538,9 @@ def main(argv: list[str]) -> int:
     date_match = re.search(r"(\d{8})", html_path.stem)
     data_tag = date_match.group(1) if date_match else date.today().strftime("%Y%m%d")
 
-    # Idempotencia
-    if _idempotency_check(data_tag, force):
+    # Idempotencia (so para o envio interno; clientes tem sentinela propria)
+    clientes = "--clientes" in argv
+    if not clientes and _idempotency_check(data_tag, force):
         if not force:
             return 0
 
@@ -556,6 +569,38 @@ def main(argv: list[str]) -> int:
     if not to_email:
         print("ERRO: TO_EMAIL ausente no .env", file=sys.stderr)
         return 4
+
+    if clientes:
+        # Modo clientes (14/08, teste de um dia aprovado pelo Yan):
+        # so envia com o flag de aprovacao do dia, para a lista do
+        # Fechamento em BCC real. Falha fechada, sem excecao.
+        flag = LOG_DIR / f"aprovacao_clientes_{data_tag}.flag"
+        if not flag.exists():
+            print("SEM APROVACAO: envio a clientes abortado. Crie o flag de aprovacao.", file=sys.stderr)
+            _log("CLIENTES_SEM_APROVACAO", str(html_path))
+            return 3
+        sentinel_clientes = LOG_DIR / f"sent_clientes_{data_tag}.flag"
+        if sentinel_clientes.exists() and not force:
+            print(f"AVISO: briefing {data_tag} ja foi enviado a clientes ({sentinel_clientes.name}).")
+            return 0
+        fech_env = _load_env(FECHAMENTO_ENV)
+        lista: list[str] = []
+        for k in ("RECIPIENT", "BCC"):
+            for a in (fech_env.get(k, "") or "").split(","):
+                a = a.strip()
+                if a and a not in lista:
+                    lista.append(a)
+        if not lista:
+            print("ERRO: lista de clientes vazia no .env do Fechamento.", file=sys.stderr)
+            return 4
+        from_clientes = fech_env.get("FROM_EMAIL", "").strip() or from_email
+        print(f">>> Enviando briefing {data_tag} para clientes ({len(lista)} destinatarios, BCC real)...")
+        if _send_resend(html_path, api_key, from_clientes, from_clientes, data_tag, bcc_list=lista):
+            _log("CLIENTES_ENVIADO_OK", f"{len(lista)} destinatarios")
+            sentinel_clientes.write_text(datetime.now(tz=BRT).isoformat())
+            return 0
+        _log("CLIENTES_ENVIO_FALHOU", str(html_path))
+        return 11
 
     print(f">>> Enviando briefing {data_tag} para {to_email}...")
 
