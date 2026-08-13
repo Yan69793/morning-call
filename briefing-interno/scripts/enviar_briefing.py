@@ -388,10 +388,10 @@ def build_styled_email(html_content: str, data_fmt: str) -> str:
         </table>
       </td></tr>
       <tr><td style="padding:6px 32px 6px 62px;font-family:'Courier New',Courier,monospace;font-size:10px;color:#b8925a;line-height:14px;mso-line-height-rule:exactly;">
-        BRIEFING MATINAL
+        PANORAMA DIARIO
       </td></tr>
       <tr><td style="padding:0 32px 24px;font-family:Georgia,'Times New Roman',Times,serif;font-size:15px;font-style:italic;color:#d8d8d8;line-height:23px;mso-line-height-rule:exactly;">
-        O que tende a subir, o que tende a descer e o impacto por projeto
+        O essencial dos mercados para começar o dia
       </td></tr>
       <tr><td height="1" bgcolor="#92703a" style="height:1px;line-height:1px;font-size:1px;background-color:#92703a;opacity:0.35;">&nbsp;</td></tr>
     </table>
