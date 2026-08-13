@@ -116,7 +116,7 @@ Decisao do Yan em 13/08: so no dia 14/08, o briefing sai tambem para a lista de 
 
 O modo `--clientes` exige o flag de aprovacao (falha fechada, testado em 13/08), le o `.env` do Fechamento para FROM_EMAIL, RECIPIENT e BCC, e usa sentinela propria `sent_clientes_<data>.flag`. Nunca imprimir os enderecos em log ou saida.
 
-PENDENCIA de 13/08: o WakeToRun da `Szuchmacher-BriefingMatinal` nao foi aplicado, as duas tentativas de UAC nao foram aceitas. Rodar elevado `scripts/wakeup-briefing-ADMIN.ps1` e conferir `WakeToRun=True`. Sem isso, maquina suspensa as 07h00 continua atrasando o briefing.
+PENDENCIA de 13/08, RESOLVIDA no mesmo dia as 12h55: o WakeToRun da `Szuchmacher-BriefingMatinal` foi aplicado e conferido direto no Agendador (`WakeToRun=True`, `StartWhenAvailable=True`, evento 140 do TaskScheduler/Operational). As duas tentativas de UAC falharam de manha, a terceira passou. Nada pendente aqui.
 
 ## Envio avulso para outro destinatario
 
