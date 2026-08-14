@@ -145,17 +145,38 @@ def _collect_finnhub(env: dict[str, str]) -> list[dict]:
     return items
 
 
+# O02 (14/08/2026): a API GDELT exige que termos combinados com OR fiquem
+# entre parenteses ("Queries containing OR'd terms must be surrounded by
+# ()"). Sem os parenteses a fonte contribuia zero noticias desde a quebra.
+GDELT_QUERIES = [
+    "(ibovespa OR bovespa OR \"bolsa brasileira\")",
+    "(petrobras OR vale OR \"banco do brasil\")",
+]
+
+
+def _get_gdelt(url: str, timeout: int = 20) -> str | None:
+    """GET GDELT distinguindo rate limit (429) dos demais erros no log."""
+    req = urllib.request.Request(url, headers={"User-Agent": UA})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return resp.read().decode("utf-8", errors="replace")
+    except urllib.error.HTTPError as exc:
+        if exc.code == 429:
+            print("rate-limit (429)")
+        else:
+            print(f"HTTP {exc.code}")
+        return None
+    except Exception:
+        return None
+
+
 def _collect_gdelt() -> list[dict]:
     """GDELT DOC API — busca por Ibovespa e mercado brasileiro.
 
     Rate limit documentado: 1 req / 5 segundos. Respeitamos com sleep.
     """
-    queries = [
-        "ibovespa OR bovespa OR \"bolsa brasileira\"",
-        "petrobras OR vale OR \"banco do brasil\"",
-    ]
     items: list[dict] = []
-    for q in queries:
+    for q in GDELT_QUERIES:
         url = (
             "https://api.gdeltproject.org/api/v2/doc/doc"
             f"?query={urllib.request.quote(q)}"
@@ -163,17 +184,22 @@ def _collect_gdelt() -> list[dict]:
             "&timespan=3d"
         )
         print(f"  GDELT: {q[:60]}...", end=" ")
-        raw = _get(url, timeout=20)
+        raw = _get_gdelt(url, timeout=20)
         if raw is None:
-            print("FALHOU")
+            print(" FALHOU")
             time.sleep(5)
             continue
 
-        # GDELT devolve rate-limit como HTTP 200 com texto, nao JSON
+        # GDELT devolve rate-limit como HTTP 200 com texto, nao JSON.
+        # O02: distinguir erro de sintaxe da query de rate-limit, para a
+        # causa real aparecer no log em vez de "provavel rate-limit".
         try:
             data = json.loads(raw)
         except json.JSONDecodeError:
-            print(f"nao-JSON (provavel rate-limit): {raw[:100]}")
+            if "surrounded by" in raw.lower() or "or'd terms" in raw.lower():
+                print(f"erro de sintaxe da query: {raw[:100]}")
+            else:
+                print(f"nao-JSON (provavel rate-limit): {raw[:100]}")
             time.sleep(5)
             continue
 

@@ -18,6 +18,8 @@ import urllib.request
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
+from _comum import load_env
+
 ROOT = Path(__file__).resolve().parent.parent
 LOG_DIR = ROOT / "logs"
 
@@ -172,9 +174,26 @@ def _consecutive_stale_days(current_date: str, system: str) -> int:
     return 1
 
 
+def _vixradar_status(vx) -> tuple[bool, str | None]:
+    """T05 (14/08/2026): resposta do VixRadar so conta como OK se for dict
+    com status string. Lista, string ou dict sem status vira "sem resposta",
+    em vez de AttributeError ou "Status: ?" no briefing.
+    """
+    if isinstance(vx, dict):
+        status = vx.get("status")
+        if isinstance(status, str):
+            return True, status
+    return False, None
+
+
 def main() -> int:
     hoje = date.today()
     date_tag = hoje.strftime("%Y%m%d")
+
+    # I01 (14/08/2026): as URLs dos workers estavam sendo lidas so de
+    # os.environ, ignorando o .env documentado no .env.example. Sessao do
+    # Task Scheduler vence, depois .env, depois o default.
+    _env = load_env()
 
     LOG_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -184,9 +203,10 @@ def main() -> int:
 
     # --- Morning Call ---
     print("\n[Morning Call]")
-    mc_url = os.environ.get(
-        "MORNING_CALL_URL",
-        "https://morning-call.prospects-intel.workers.dev/api/report/latest",
+    mc_url = (
+        os.environ.get("MORNING_CALL_URL")
+        or _env.get("MORNING_CALL_URL")
+        or "https://morning-call.prospects-intel.workers.dev/api/report/latest"
     )
     mc = _get_json(mc_url)
     if mc and mc.get("ok"):
@@ -207,9 +227,10 @@ def main() -> int:
 
     # --- Radar Quant ---
     print("\n[Radar Quant]")
-    rq_url = os.environ.get(
-        "RADAR_QUANT_URL",
-        "https://radar-quant-brasil.prospects-intel.workers.dev/api/radar/latest",
+    rq_url = (
+        os.environ.get("RADAR_QUANT_URL")
+        or _env.get("RADAR_QUANT_URL")
+        or "https://radar-quant-brasil.prospects-intel.workers.dev/api/radar/latest"
     )
     rq = _get_json(rq_url)
     if rq and rq.get("marketDate"):
@@ -229,7 +250,9 @@ def main() -> int:
         print(f"  OK: marketDate={market_date} ({status}, {staleness['dias_atraso']}d atraso, {dias_cons}d consecutivos)")
 
         # Yahoo Finance fallback se > 2 dias stale
-        if staleness["stale"] and staleness.get("dias_atraso", 0) >= 2:
+        # T03 (14/08/2026): dias_atraso pode ser None (marketDate invalido),
+        # e None >= 2 levantava TypeError derrubando o coletor.
+        if staleness["stale"] and (staleness.get("dias_atraso") or 0) >= 2:
             print("  >>> Staleness >= 2 dias. Buscando Yahoo Finance...")
             yahoo_data = _fetch_yahoo(YAHOO_SYMBOLS)
             sistemas["radar-quant"]["yahoo_fallback"] = {
@@ -248,21 +271,23 @@ def main() -> int:
 
     # --- VixRadar ---
     print("\n[VixRadar]")
-    vx_url = os.environ.get(
-        "VIXRADAR_URL",
-        "https://radar-credito-api.prospects-intel.workers.dev",
+    vx_url = (
+        os.environ.get("VIXRADAR_URL")
+        or _env.get("VIXRADAR_URL")
+        or "https://radar-credito-api.prospects-intel.workers.dev"
     )
     vx = _get_json(vx_url, timeout=15)
-    if vx:
+    vx_ok, vx_status = _vixradar_status(vx)
+    if vx_ok:
         sistemas["vixradar"] = {
             "ok": True,
-            "status": vx.get("status", "desconhecido"),
+            "status": vx_status,
             "data_coleta": datetime.now(tz=BRT).isoformat(),
         }
-        print(f"  OK: status={vx.get('status', '?')}")
+        print(f"  OK: status={vx_status}")
     else:
-        sistemas["vixradar"] = {"ok": False, "erro": "sem resposta do worker"}
-        print("  FALHOU: sem resposta do worker")
+        sistemas["vixradar"] = {"ok": False, "erro": "sem resposta ou resposta sem status"}
+        print("  FALHOU: sem resposta do worker ou resposta sem status")
 
     # --- Mapa de exposicao ---
     exp_path = ROOT / "projetos-exposicao.json"

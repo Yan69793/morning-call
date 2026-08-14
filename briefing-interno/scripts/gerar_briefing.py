@@ -227,6 +227,22 @@ def _build_user_prompt(
     return "\n".join(partes)
 
 
+def _json_or_runtime(body: bytes, provider: str) -> dict:
+    """Parse JSON de resposta de provedor, convertendo corpo nao-JSON em RuntimeError.
+
+    T01 (14/08/2026): 200 com corpo nao-JSON (pagina de erro de proxy,
+    corpo vazio) derrubava o pipeline inteiro com JSONDecodeError em vez
+    de avancar para o proximo modelo do cascade.
+    """
+    try:
+        data = json.loads(body)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"{provider} resposta nao-JSON: {exc}") from exc
+    if not isinstance(data, dict):
+        raise RuntimeError(f"{provider} resposta com shape inesperado: {type(data).__name__}")
+    return data
+
+
 def _call_openrouter(
     api_key: str,
     model: str,
@@ -268,7 +284,7 @@ def _call_openrouter(
 
     try:
         with urllib.request.urlopen(req, timeout=180) as resp:
-            payload = json.loads(resp.read())
+            payload = _json_or_runtime(resp.read(), "OpenRouter")
     except urllib.error.HTTPError as exc:
         corpo = ""
         try:

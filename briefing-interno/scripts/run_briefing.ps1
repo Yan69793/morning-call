@@ -66,7 +66,7 @@ function Run-Python($script, $extraArgs = @()) {
 $feriadosPath = Join-Path $ProjectRoot 'feriados-b3.json'
 if (-not (Test-Path $feriadosPath)) {
     Log "ERRO: feriados-b3.json nao encontrado. Abortando."
-    return 5
+    exit 5
 }
 
 $feriados = Get-Content $feriadosPath -Raw -Encoding UTF8 | ConvertFrom-Json
@@ -79,14 +79,14 @@ $hoje = Get-Date
 $diaSemana = $hoje.DayOfWeek.value__  # 0=Sunday
 if ($diaSemana -eq 0 -or $diaSemana -eq 6) {
     Log "Fim de semana. Nada a fazer."
-    return 0
+    exit 0
 }
 
 $hojeISO = $hoje.ToString('yyyy-MM-dd')
 $feriadoHoje = $feriados.feriados | Where-Object { $_.data -eq $hojeISO }
 if ($feriadoHoje) {
     Log "Feriado B3: $($feriadoHoje.nome). Nada a fazer."
-    return 0
+    exit 0
 }
 
 Log "RUN: dia util confirmado ($hojeISO). Iniciando pipeline..."
@@ -119,7 +119,7 @@ $exitCode = Run-Python (Join-Path $ScriptRoot 'gerar_briefing.py')
 Log "gerar_briefing.py exit $exitCode"
 if ($exitCode -ne 0) {
     Log "ERRO FATAL: gerar_briefing.py falhou (exit $exitCode). Abortando."
-    return $exitCode
+    exit $exitCode
 }
 
 # ============================================================
@@ -129,13 +129,13 @@ Log "PASSO 4: validar_briefing.py"
 $briefingPath = Join-Path $ProjectRoot "outputs" "briefing_${DateTag}.html"
 if (-not (Test-Path $briefingPath)) {
     Log "ERRO FATAL: briefing nao encontrado: $briefingPath"
-    return 6
+    exit 6
 }
 $exitCode = Run-Python (Join-Path $ScriptRoot 'validar_briefing.py') @($briefingPath)
 Log "validar_briefing.py exit $exitCode"
 if ($exitCode -ne 0) {
     Log "REPROVADO: briefing nao passou no portao. Envio abortado."
-    return $exitCode
+    exit $exitCode
 }
 
 # ============================================================
@@ -150,4 +150,4 @@ if ($exitCode -eq 0) {
     Log "ERRO: envio falhou (exit $exitCode)."
 }
 
-return $exitCode
+exit $exitCode

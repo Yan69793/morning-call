@@ -6,7 +6,7 @@
 # ASCII puro: roda via powershell.exe (Windows PowerShell 5.1) no Task Scheduler.
 
 $ErrorActionPreference = 'Continue'
-$ProjectRoot = 'E:\Diretorio\Claude\FREQUENTE\Morning Call\briefing-interno'
+$ProjectRoot = Split-Path -Parent $PSScriptRoot
 $DateTag = Get-Date -Format 'yyyyMMdd'
 $LogFile = Join-Path $ProjectRoot "logs\briefing_$DateTag.log"
 $FlagAprovacao = Join-Path $ProjectRoot "logs\aprovacao_clientes_$DateTag.flag"
@@ -19,20 +19,20 @@ if (-not (Test-Path $FlagAprovacao)) {
     $msg = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') CLIENTES: SEM APROVACAO, envio nao realizado"
     Add-Content -Path $LogFile -Value $msg -Encoding UTF8
     Unregister-ScheduledTask -TaskName 'Szuchmacher-EnvioClientes' -Confirm:$false
-    return 0
+    exit 0
 }
 
 if (-not (Test-Path $HtmlDoDia)) {
     $msg = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') CLIENTES: HTML do dia nao encontrado, envio nao realizado"
     Add-Content -Path $LogFile -Value $msg -Encoding UTF8
     Unregister-ScheduledTask -TaskName 'Szuchmacher-EnvioClientes' -Confirm:$false
-    return 1
+    exit 1
 }
 
-python "$ProjectRoot\scripts\enviar_briefing.py" $HtmlDoDia --clientes *>> $LogFile
+python "$ProjectRoot\scripts\enviar_briefing.py" "$HtmlDoDia" --clientes *>> $LogFile
 $code = $LASTEXITCODE
 $msg = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') CLIENTES: enviar_briefing exit $code"
 Add-Content -Path $LogFile -Value $msg -Encoding UTF8
 
 Unregister-ScheduledTask -TaskName 'Szuchmacher-EnvioClientes' -Confirm:$false
-return $code
+exit $code

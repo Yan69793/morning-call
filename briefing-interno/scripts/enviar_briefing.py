@@ -489,7 +489,7 @@ def _send_resend(
 
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
-            result = json.loads(resp.read())
+            result = _parse_resend_response(resp.read())
     except urllib.error.HTTPError as exc:
         corpo = ""
         try:
@@ -502,9 +502,27 @@ def _send_resend(
         print(f"ERRO Resend rede: {exc}", file=sys.stderr)
         return False
 
-    email_id = result.get("id", "?")
+    # T02 (14/08/2026): 200 com corpo nao-JSON derrubava o script com
+    # JSONDecodeError, e 200 com shape sem id declarava envio sem envio.
+    if result is None:
+        print("ERRO Resend: resposta nao-JSON ou shape inesperado", file=sys.stderr)
+        return False
+    email_id = result.get("id")
+    if not email_id:
+        print("ERRO Resend: resposta sem id de envio", file=sys.stderr)
+        return False
+
     print(f"OK: email enviado, Resend ID: {email_id}")
     return True
+
+
+def _parse_resend_response(body: bytes) -> dict | None:
+    """Parse da resposta do Resend. None quando nao-JSON ou shape inesperado."""
+    try:
+        data = json.loads(body)
+    except json.JSONDecodeError:
+        return None
+    return data if isinstance(data, dict) else None
 
 
 def _log(status: str, detail: str) -> None:
