@@ -102,10 +102,10 @@ export interface SignalPlan {
 
 export interface SignalMacroContext {
   ibovRegime: Regime;
-  ibovScore: number;
-  vixLast: number;
+  ibovScore: number | null;
+  vixLast: number | null;
   vixRegime: Regime;
-  usdbrlLast: number;
+  usdbrlLast: number | null;
 }
 
 export interface SignalDocument {

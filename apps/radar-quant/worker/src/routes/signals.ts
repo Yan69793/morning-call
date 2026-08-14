@@ -48,10 +48,28 @@ signalRoutes.post('/generate', async (c) => {
   const usdbrl = scan.items.find(i => i.symbol.includes('USDBRL'))
 
   const ibovRegime: Regime = ibov?.regime ?? 'NEUTRO'
-  const ibovScore = ibov?.score ?? 0
-  const vixLast = vix?.last ?? 0
+  // B-004/B-005/B-006 (14/08/2026): dado ausente era coagido a 0, e 0 votava
+  // favoravel no gate (ibovScore >= 0) e abria o gate de risco (vix >= 25
+  // falso). Ausencia agora propaga null ate o motor e o prompt.
+  const ibovScore: number | null = typeof ibov?.score === 'number' ? ibov.score : null
+  const vixLast: number | null = typeof vix?.last === 'number' ? vix.last : null
   const vixRegime: Regime = vix?.regime ?? 'NEUTRO'
-  const usdbrlLast = usdbrl?.last ?? 0
+  const usdbrlLast: number | null = typeof usdbrl?.last === 'number' ? usdbrl.last : null
+
+  // B-007: o payload atravessa JSON.parse as ScanDocument sem validacao.
+  // Campos nulos/faltantes coageiam a 0 ou estouram no meio do motor.
+  // Fecha a fronteira antes de chamar o motor de regras.
+  if (
+    typeof item.score !== 'number' ||
+    !item.metrics ||
+    typeof item.metrics.ret_20d !== 'number' ||
+    typeof item.metrics.rangePos_60d !== 'number' ||
+    typeof item.metrics.upDays_5 !== 'number' ||
+    !item.quality ||
+    typeof item.quality.symbolError !== 'boolean'
+  ) {
+    return c.json({ error: 'dados insuficientes para o motor de sinais' }, 422)
+  }
 
   const setup = evaluateSwingSetup({
     score: item.score,
@@ -60,7 +78,7 @@ signalRoutes.post('/generate', async (c) => {
     rangePos_60d: item.metrics.rangePos_60d,
     upDays_5: item.metrics.upDays_5,
     ibovScore,
-    vixRiscoOff: vixLast >= 25,
+    vixRiscoOff: vixLast === null ? null : vixLast >= 25,
     symbolError: item.quality.symbolError,
   })
 

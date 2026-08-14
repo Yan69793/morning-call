@@ -20,15 +20,19 @@ export interface SwingInput {
   ret_20d: number;
   rangePos_60d: number;
   upDays_5: number;
-  ibovScore: number;
+  // 14/08/2026 (B-004/B-005 do PENDENCIAS.md): null = sem dado no scan.
+  // O motor nunca vota favoravel com dado ausente: ibovScore null falha a
+  // condicao de confluencia, e vixRiscoOff null bloqueia o setup.
+  ibovScore: number | null;
   // O enum Regime não tem estado 'RISCO'; o chamador calcula risk-off a partir
-  // do nível do VIX (ex.: vixLast >= 25) e passa o booleano já resolvido.
-  vixRiscoOff: boolean;
+  // do nível do VIX (ex.: vixLast >= 25) e passa o booleano já resolvido,
+  // ou null quando nao ha dado de VIX (fail-closed, ver evaluateSwingSetup).
+  vixRiscoOff: boolean | null;
   symbolError: boolean;
 }
 
-function vixRisco(input: { vixRiscoOff: boolean }): boolean {
-  return input.vixRiscoOff;
+function vixRisco(input: { vixRiscoOff: boolean | null }): boolean {
+  return input.vixRiscoOff === true;
 }
 
 export function evaluateSwingSetup(input: SwingInput): SetupResult {
@@ -38,6 +42,10 @@ export function evaluateSwingSetup(input: SwingInput): SetupResult {
   // Gates duros
   if (input.symbolError) {
     return { valid: false, direction: "NEUTRO", reasons: [], failed: ["symbolError"] };
+  }
+  // B-005: VIX ausente nao conta como "sem risco". Sem dado, o gate fecha.
+  if (input.vixRiscoOff === null) {
+    return { valid: false, direction: "NEUTRO", reasons: [], failed: ["vix sem dado"] };
   }
   if (vixRisco(input)) {
     return { valid: false, direction: "NEUTRO", reasons: [], failed: ["vix RISCO"] };
@@ -61,14 +69,14 @@ export function evaluateSwingSetup(input: SwingInput): SetupResult {
     check(input.ret_20d > 2, "ret_20d>2");
     check(input.rangePos_60d > 60, "rangePos_60d>60");
     check(input.upDays_5 >= 3, "upDays_5>=3");
-    check(input.ibovScore >= 0, "ibovScore>=0");
+    check(input.ibovScore !== null && input.ibovScore >= 0, "ibovScore>=0");
   } else {
     check(input.score <= -40, "score<=-40");
     check(input.regime === "BAIXA", "regime BAIXA");
     check(input.ret_20d < -2, "ret_20d<-2");
     check(input.rangePos_60d < 40, "rangePos_60d<40");
     check(input.upDays_5 <= 2, "upDays_5<=2");
-    check(input.ibovScore <= 0, "ibovScore<=0");
+    check(input.ibovScore !== null && input.ibovScore <= 0, "ibovScore<=0");
   }
 
   // Válido quando o núcleo (score + regime) passa e ao menos 4 das 6 condições

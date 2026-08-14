@@ -15,7 +15,7 @@ const PLAN_SCHEMA = {
   required: ['verdict', 'entry', 'stop', 'target1', 'target2', 'conviction', 'riskReward', 'indicatorsUsed', 'justification'],
 }
 
-export interface MacroCtx { ibovRegime: Regime; ibovScore: number; vixLast: number; vixRegime: Regime; usdbrlLast: number }
+export interface MacroCtx { ibovRegime: Regime; ibovScore: number | null; vixLast: number | null; vixRegime: Regime; usdbrlLast: number | null }
 
 export function buildPrompt(item: RadarItem, macro: MacroCtx, setup: SetupResult): string {
   const m = item.metrics
@@ -39,9 +39,9 @@ MÉTRICAS
 - Dias de alta nos últimos 5: ${m.upDays_5}
 
 CONTEXTO MACRO
-- IBOV regime: ${macro.ibovRegime}, score: ${macro.ibovScore}
-- VIX último: ${macro.vixLast}, regime: ${macro.vixRegime}
-- USDBRL último: ${macro.usdbrlLast}
+- IBOV regime: ${macro.ibovRegime}, score: ${macro.ibovScore ?? 'sem dado'}
+- VIX último: ${macro.vixLast ?? 'sem dado'}, regime: ${macro.vixRegime}
+- USDBRL último: ${macro.usdbrlLast ?? 'sem dado'}
 
 CONDIÇÕES DO SETUP (motor de regras determinístico)
 - Setup válido: ${setup.valid}
