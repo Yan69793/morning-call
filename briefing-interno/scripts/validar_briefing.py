@@ -46,6 +46,12 @@ DIRECTIONAL_PATTERNS = [
     re.compile(r"sinal\s+(positivo|negativo|de\s+alta|de\s+baixa)", re.IGNORECASE),
     re.compile(r"expectativa\s+(positiva|negativa|de\s+alta|de\s+baixa)", re.IGNORECASE),
     re.compile(r"vi[eé]s\s+(altista|baixista|positivo|negativo|de\s+alta|de\s+baixa)", re.IGNORECASE),
+    # 14/08/2026: o prompt de gerar_briefing.py documenta "deve pressionar" e
+    # "revisao para baixo/cima" como padrao valido de chamada direcional, mas o
+    # validador nao os detectava. Esse drift reprovou o briefing do dia com
+    # REGRA 5 mesmo com 4 confiancas declaradas e 6 URLs no pool.
+    re.compile(r"(tende|deve|pode)\s+(a\s+)?pressionar", re.IGNORECASE),
+    re.compile(r"revis[aã]o\s+para\s+(baixo|cima)", re.IGNORECASE),
 ]
 
 # Regex para encontrar URLs no HTML (para nos colchetes das citacoes)

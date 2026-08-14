@@ -118,6 +118,16 @@ O modo `--clientes` exige o flag de aprovacao (falha fechada, testado em 13/08),
 
 PENDENCIA de 13/08, RESOLVIDA no mesmo dia as 12h55: o WakeToRun da `Szuchmacher-BriefingMatinal` foi aplicado e conferido direto no Agendador (`WakeToRun=True`, `StartWhenAvailable=True`, evento 140 do TaskScheduler/Operational). As duas tentativas de UAC falharam de manha, a terceira passou. Nada pendente aqui.
 
+## Decisao de 14/08/2026: envio a clientes cancelado, briefing sai sempre e apenas para o Yan
+
+O teste de um dia nao chegou a acontecer: o briefing das 07h00 de 14/08 reprovou no portao (REGRA 5, drift prompt x validador, corrigido no mesmo dia) e a task `Szuchmacher-EnvioClientes` das 10h00 saiu com `SEM APROVACAO` e se auto-removeu, como projetado. O fail-closed funcionou.
+
+Na mesma tarde o Yan decidiu: **o briefing nao vai mais para clientes, sempre e apenas para ele**. O teste de um dia fica cancelado de forma permanente. O que isso significa em codigo:
+
+- O modo `--clientes` do `enviar_briefing.py` e o `run_envio_clientes.ps1` seguem no repo sem uso (remover ou manter como codigo morto documentado e uma pergunta aberta no PENDENCIAS.md, pergunta P-04).
+- Nenhuma task do Task Scheduler envia para clientes (a `Szuchmacher-EnvioClientes` era unica e se auto-removeu em 14/08).
+- O visual "PANORAMA DIARIO" com logo Szuchmacher fica como esta, agora direcionado ao Yan.
+
 ## Envio avulso para outro destinatario
 
 `enviar_briefing.py` aceita `--to email@x.com` para mandar uma copia para outro endereco sem mexer no `.env`. A validacao e a sentinela de idempotencia continuam valendo. Pedido do Yan em 13/08 para revisar o material em outra caixa.
