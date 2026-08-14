@@ -25,6 +25,10 @@ O que falta para fechar a rodada (ação humana, deploy):
 - Verificação em produção com curl.exe: health ok nos dois; CORS do morning-call não ecoa origem atacante e ecoa a lista; `/trigger` sem secret 401; POST watchlist e signals/generate sem secret 401; GET watchlist segue público.
 - RESTA 1 item: criar o secret `TRIGGER_SECRET` no worker morning-call. Até lá, `/trigger` nega sempre (fail-closed correto). O briefing das 07h00 não depende dele, só o trigger manual.
 
+### Secret criado (14/08, noite)
+
+`TRIGGER_SECRET` criado no worker morning-call via `wrangler secret put` (valor aleatório de 29 chars, entregue ao Yan no chat; não registrar o valor aqui). Uso: header `x-trigger-secret` no `/trigger` ou no `/trigger-now` em produção. Atenção: um trigger positivo roda a pipeline diária inteira com LLMs pagos, testar só quando quiser rodar de verdade. Nada resta pendente da rodada de deploy.
+
 ## Síntese
 
 1. Dois achados críticos no Worker morning-call, ambos violando a regra da casa de segurança: CORS `*` hardcoded (MC-021) e o trigger com fallback fail-open `|| "debug"` (MC-022). A rota `/trigger-now` sem auth nenhuma (MC-029) fecha o trio.
