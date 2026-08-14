@@ -1,4 +1,4 @@
-# run_envio_clientes.ps1 — disparo unico das 10h00 do dia 14/08/2026.
+# run_envio_clientes.ps1, disparo unico das 10h00 do dia 14/08/2026.
 # Envia o briefing aprovado do dia para a lista de clientes do Fechamento
 # de Mercado, em BCC real. Sem o flag de aprovacao em
 # logs/aprovacao_clientes_<data>.flag, NADA sai (falha fechada).

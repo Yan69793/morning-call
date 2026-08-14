@@ -7,8 +7,13 @@ compatibility_flags = ["nodejs_compat"]
 
 # MC-029 (14/08/2026): /trigger-now so abre sem secret quando ENVIRONMENT
 # nao e "production". O valor de producao precisa existir no deploy real.
+# CORS fail-closed (MC-021): sem CORS_ORIGINS nenhuma origem passa. Lista
+# espelhada no par simetrico do radar-quant (que ja permite este dominio):
+# o dashboard irmao e o produto guarda-chuva. Editar aqui e redeployar,
+# ou sobrescrever via dashboard (variavel simples, nao secret).
 [vars]
 ENVIRONMENT = "production"
+CORS_ORIGINS = "https://radar-quant-brasil.pages.dev,https://vixradar.com"
 
 # Cron em UTC. BRT é UTC-3 fixo (o Brasil não observa horário de verão desde 2019).
 #   "30 9  * * 1-5" = 06:30 BRT, geração do Morning Call.

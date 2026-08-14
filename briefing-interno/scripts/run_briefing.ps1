@@ -1,8 +1,8 @@
 # run_briefing.ps1: orquestrador do Briefing Matinal
 #
 # Chamado pelo launcher_briefing.ps1 via Task Scheduler.
-# ASCII puro com BOM — roda no pwsh.exe (PowerShell 7).
-# $ErrorActionPreference = 'Continue' — regra global do Yan.
+# ASCII puro com BOM, roda no pwsh.exe (PowerShell 7).
+# $ErrorActionPreference = 'Continue', regra global do Yan.
 #
 # Fluxo: decide dia util -> coleta noticias -> coleta estado ->
 #        gera briefing -> valida -> envia (se aprovado).
