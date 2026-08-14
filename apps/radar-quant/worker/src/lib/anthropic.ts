@@ -67,6 +67,9 @@ export async function generatePlan(apiKey: string, prompt: string): Promise<Sign
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+    // RQ-25 (14/08/2026): sem timeout, uma chamada pendurada segurava o
+    // worker ate o teto da plataforma.
+    signal: AbortSignal.timeout(30_000),
     body: JSON.stringify({
       model: 'claude-haiku-4-5',
       max_tokens: 512,

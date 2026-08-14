@@ -1,11 +1,12 @@
 import { Hono } from 'hono'
 import { getSignalById, getLatestScan } from '../db/queries'
+import { requireIngestSecret } from '../lib/auth'
 import { persistSignal } from '../lib/persist-signal'
 import { buildPrompt, generatePlan, type MacroCtx } from '../lib/anthropic'
 import { evaluateSwingSetup } from '@sz/analytics'
 import type { ScanDocument, SignalDocument, Regime } from '../types'
 
-type Bindings = { DB: D1Database; KV: KVNamespace; ANTHROPIC_API_KEY: string }
+type Bindings = { DB: D1Database; KV: KVNamespace; ANTHROPIC_API_KEY: string; INGEST_SECRET: string }
 export const signalRoutes = new Hono<{ Bindings: Bindings }>()
 
 // Lista os últimos sinais (cache KV). Array vazio se não houver nenhum.
@@ -15,7 +16,9 @@ signalRoutes.get('/latest', async (c) => {
 })
 
 // Gera um novo sinal swing (motor de regras + Haiku) e persiste.
-signalRoutes.post('/generate', async (c) => {
+// RQ-20 (14/08/2026): rota era publica e queimava quota Anthropic de
+// qualquer um. Agora exige x-ingest-secret, o mesmo do ingest.
+signalRoutes.post('/generate', requireIngestSecret, async (c) => {
   let body: { symbol?: string }
   try {
     body = await c.req.json()
@@ -27,8 +30,9 @@ signalRoutes.post('/generate', async (c) => {
 
   if (!c.env.ANTHROPIC_API_KEY) return c.json({ error: 'ANTHROPIC_API_KEY not configured' }, 503)
 
-  // Rate limit: cooldown por símbolo (60s) e cap diário (200)
-  const cooldownKey = `gen:cooldown:${symbol}`
+  // Rate limit: cooldown por símbolo (60s) e cap diário (200).
+  // RQ-32: chave normalizada, petr4 e PETR4 eram chaves diferentes.
+  const cooldownKey = `gen:cooldown:${symbol.toUpperCase()}`
   if (await c.env.KV.get(cooldownKey)) return c.json({ error: 'cooldown' }, 429)
   const today = new Date().toISOString().slice(0, 10)
   const countKey = `gen:count:${today}`

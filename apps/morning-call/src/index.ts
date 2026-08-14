@@ -10,20 +10,48 @@ import { getLatestReport, type ReportPayload } from "./db/runs.js";
 export type { Env };
 export { MorningCallWorkflow };
 
-const CORS_HEADERS: Record<string, string> = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type",
-};
+// MC-021 (14/08/2026): regra da casa, CORS fail-closed. Nada de "*".
+// Sem CORS_ORIGINS configurada, nenhuma origem recebe header.
+function corsHeadersFor(request: Request, env: Env): Record<string, string> {
+  const headers: Record<string, string> = {
+    "Access-Control-Allow-Methods": "GET, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+  };
+  const origin = request.headers.get("Origin");
+  const allowed = (env.CORS_ORIGINS ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (origin && allowed.includes(origin)) {
+    headers["Access-Control-Allow-Origin"] = origin;
+    headers["Vary"] = "Origin";
+  }
+  return headers;
+}
 
-function corsJson(data: unknown, init?: ResponseInit): Response {
+function corsJson(request: Request, env: Env, data: unknown, init?: ResponseInit): Response {
   const headers = new Headers(init?.headers);
-  for (const [k, v] of Object.entries(CORS_HEADERS)) {
+  for (const [k, v] of Object.entries(corsHeadersFor(request, env))) {
     headers.set(k, v);
   }
   headers.set("Content-Type", "application/json");
   headers.set("Cache-Control", "no-cache, no-store, must-revalidate");
   return new Response(JSON.stringify(data), { ...init, headers });
+}
+
+// MC-022 (14/08/2026): comparacao timing-safe, mesmo padrao do ingest do
+// radar-quant. Sem secret configurado, negar sempre (nada de "debug").
+async function timingSafeEqual(a: string, b: string): Promise<boolean> {
+  const enc = new TextEncoder();
+  const ka = await crypto.subtle.importKey("raw", enc.encode(a), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const sigA = await crypto.subtle.sign("HMAC", ka, enc.encode("trigger"));
+  const kb = await crypto.subtle.importKey("raw", enc.encode(b), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const sigB = await crypto.subtle.sign("HMAC", kb, enc.encode("trigger"));
+  const ua = new Uint8Array(sigA);
+  const ub = new Uint8Array(sigB);
+  let diff = 0;
+  for (let i = 0; i < ua.length; i++) diff |= (ua[i] ?? 0) ^ (ub[i] ?? 0);
+  return diff === 0;
 }
 
 export default {
@@ -32,11 +60,11 @@ export default {
 
     // CORS preflight
     if (request.method === "OPTIONS") {
-      return new Response(null, { status: 204, headers: CORS_HEADERS });
+      return new Response(null, { status: 204, headers: corsHeadersFor(request, env) });
     }
 
     if (url.pathname === "/health") {
-      return corsJson({
+      return corsJson(request, env, {
         ok: true,
         service: "morning-call",
         trade_date_brt: todayTradeDateBrt(),
@@ -48,13 +76,13 @@ export default {
       try {
         const report = await getLatestReport(env.DB);
         if (!report) {
-          return corsJson({ ok: false, error: "nenhum relatorio disponivel" }, { status: 404 });
+          return corsJson(request, env, { ok: false, error: "nenhum relatorio disponivel" }, { status: 404 });
         }
         // `report.payload` é escrito por `saveReportPointer` neste mesmo Worker (workflow.ts),
         // não input externo. O cast documenta o shape em vez de deixar `any` correr solto pelo
         // corpo da resposta — ver `ReportPayload` em db/runs.ts.
         const payload = JSON.parse(report.payload) as ReportPayload;
-        return corsJson({
+        return corsJson(request, env, {
           ok: true,
           trade_date: report.trade_date,
           generated_at: report.generated_at,
@@ -67,6 +95,8 @@ export default {
         });
       } catch (err) {
         return corsJson(
+          request,
+          env,
           {
             ok: false,
             error: err instanceof Error ? err.message : "erro ao carregar relatorio",
@@ -77,10 +107,18 @@ export default {
     }
 
     if (url.pathname === "/trigger" || url.pathname === "/trigger-now") {
-      // /trigger-now nao requer secret (debug local)
-      if (url.pathname === "/trigger") {
-        const secret = url.searchParams.get("secret") ?? "";
-        if (!secret || secret !== (env.RADAR_QUANT_INGEST_SECRET || "debug")) {
+      // MC-022/MC-028/MC-029 (14/08/2026): secret proprio (TRIGGER_SECRET) no
+      // header x-trigger-secret, fail-closed (sem secret configurado, nega
+      // sempre). A query string so cai como compatibilidade e vai para os
+      // request logs, usar o header. /trigger-now so abre sem secret fora
+      // de producao.
+      const debugLocal = url.pathname === "/trigger-now" && env.ENVIRONMENT !== "production";
+      if (!debugLocal) {
+        const configured = env.TRIGGER_SECRET ?? "";
+        const header = request.headers.get("x-trigger-secret") ?? "";
+        const query = url.searchParams.get("secret") ?? "";
+        const candidate = header || query;
+        if (!configured || !candidate || !(await timingSafeEqual(candidate, configured))) {
           return Response.json({ error: "unauthorized" }, { status: 401 });
         }
       }

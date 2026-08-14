@@ -2,7 +2,9 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { Hono } from 'hono'
 import { watchlistRoutes } from '../src/routes/watchlist'
 
-type Bindings = { KV: KVNamespace }
+type Bindings = { KV: KVNamespace; INGEST_SECRET: string }
+
+const AUTH = { 'x-ingest-secret': 'test-secret' }
 
 function makeKv(): KVNamespace {
   const store = new Map<string, string>()
@@ -20,7 +22,7 @@ function makeKv(): KVNamespace {
 function makeApp(kv: KVNamespace) {
   const app = new Hono<{ Bindings: Bindings }>()
   app.route('/', watchlistRoutes)
-  return { app, env: { KV: kv } }
+  return { app, env: { KV: kv, INGEST_SECRET: 'test-secret' } }
 }
 
 describe('watchlistRoutes', () => {
@@ -41,7 +43,7 @@ describe('watchlistRoutes', () => {
     const { app, env } = makeApp(kv)
     const res = await app.request(
       '/',
-      { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ symbol: 'COINBASE:BTCUSD' }) },
+      { method: 'POST', headers: { 'content-type': 'application/json', ...AUTH }, body: JSON.stringify({ symbol: 'COINBASE:BTCUSD' }) },
       env,
     )
     expect(res.status).toBe(200)
@@ -52,7 +54,7 @@ describe('watchlistRoutes', () => {
     const { app, env } = makeApp(kv)
     const res = await app.request(
       '/',
-      { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ symbol: 'petr4' }) },
+      { method: 'POST', headers: { 'content-type': 'application/json', ...AUTH }, body: JSON.stringify({ symbol: 'petr4' }) },
       env,
     )
     expect(await res.json()).toEqual({ ok: true, symbols: ['BMFBOVESPA:PETR4'] })
@@ -60,14 +62,14 @@ describe('watchlistRoutes', () => {
 
   it('não duplica símbolo já presente', async () => {
     const { app, env } = makeApp(kv)
-    await app.request('/', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ symbol: 'PETR4' }) }, env)
-    const res = await app.request('/', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ symbol: 'PETR4' }) }, env)
+    await app.request('/', { method: 'POST', headers: { 'content-type': 'application/json', ...AUTH }, body: JSON.stringify({ symbol: 'PETR4' }) }, env)
+    const res = await app.request('/', { method: 'POST', headers: { 'content-type': 'application/json', ...AUTH }, body: JSON.stringify({ symbol: 'PETR4' }) }, env)
     expect(await res.json()).toEqual({ ok: true, symbols: ['BMFBOVESPA:PETR4'] })
   })
 
   it('rejeita payload sem symbol', async () => {
     const { app, env } = makeApp(kv)
-    const res = await app.request('/', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({}) }, env)
+    const res = await app.request('/', { method: 'POST', headers: { 'content-type': 'application/json', ...AUTH }, body: JSON.stringify({}) }, env)
     expect(res.status).toBe(400)
   })
 
@@ -75,7 +77,7 @@ describe('watchlistRoutes', () => {
     const { app, env } = makeApp(kv)
     const res = await app.request(
       '/',
-      { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ symbol: 'NASDAQ:<script>' }) },
+      { method: 'POST', headers: { 'content-type': 'application/json', ...AUTH }, body: JSON.stringify({ symbol: 'NASDAQ:<script>' }) },
       env,
     )
     expect(res.status).toBe(400)
@@ -83,10 +85,10 @@ describe('watchlistRoutes', () => {
 
   it('remove símbolo existente', async () => {
     const { app, env } = makeApp(kv)
-    await app.request('/', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ symbol: 'PETR4' }) }, env)
+    await app.request('/', { method: 'POST', headers: { 'content-type': 'application/json', ...AUTH }, body: JSON.stringify({ symbol: 'PETR4' }) }, env)
     const res = await app.request(
       '/remove',
-      { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ symbol: 'PETR4' }) },
+      { method: 'POST', headers: { 'content-type': 'application/json', ...AUTH }, body: JSON.stringify({ symbol: 'PETR4' }) },
       env,
     )
     expect(await res.json()).toEqual({ ok: true, symbols: [] })
@@ -98,7 +100,7 @@ describe('watchlistRoutes', () => {
     await kv.put('watchlist:requested', JSON.stringify(seeded))
     const res = await app.request(
       '/',
-      { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ symbol: 'NOVO' }) },
+      { method: 'POST', headers: { 'content-type': 'application/json', ...AUTH }, body: JSON.stringify({ symbol: 'NOVO' }) },
       env,
     )
     expect(res.status).toBe(429)

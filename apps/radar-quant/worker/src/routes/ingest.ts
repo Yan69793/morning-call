@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import { insertScan } from '../db/queries'
+import { timingSafeEqual } from '../lib/auth'
 import { persistSignal } from '../lib/persist-signal'
 import type { ScanDocument, OptimizationResult, OperatorSnapshot, SignalDocument } from '../types'
 
@@ -18,17 +19,6 @@ function encodeStr(s: string): Uint8Array {
   return new TextEncoder().encode(s)
 }
 
-async function timingSafeEqual(a: string, b: string): Promise<boolean> {
-  const ka = await crypto.subtle.importKey('raw', encodeStr(a), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
-  const sigA = await crypto.subtle.sign('HMAC', ka, encodeStr('compare'))
-  const kb = await crypto.subtle.importKey('raw', encodeStr(b), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
-  const sigB = await crypto.subtle.sign('HMAC', kb, encodeStr('compare'))
-  const ua = new Uint8Array(sigA), ub = new Uint8Array(sigB)
-  let diff = 0
-  for (let i = 0; i < ua.length; i++) diff |= ua[i] ^ ub[i]
-  return diff === 0
-}
-
 async function verifyHmac(secret: string, signature: string, timestamp: string, body: string): Promise<boolean> {
   const now = Math.floor(Date.now() / 1000)
   const ts = parseInt(timestamp, 10)
@@ -45,6 +35,7 @@ async function verifyHmac(secret: string, signature: string, timestamp: string, 
 ingestRoutes.use('*', async (c, next) => {
   const auth = c.req.header('x-ingest-secret') ?? ''
   const secret = c.env.INGEST_SECRET
+  if (!auth) return c.json({ error: 'Unauthorized' }, 401)
   const ok = await timingSafeEqual(auth, secret)
   if (!ok) return c.json({ error: 'Unauthorized' }, 401)
 

@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
+import { requireIngestSecret } from '../lib/auth'
 
-type Bindings = { KV: KVNamespace }
+type Bindings = { KV: KVNamespace; INGEST_SECRET: string }
 
 export const watchlistRoutes = new Hono<{ Bindings: Bindings }>()
 
@@ -31,7 +32,9 @@ watchlistRoutes.get('/', async (c) => {
   return c.json({ symbols: list })
 })
 
-watchlistRoutes.post('/', async (c) => {
+// RQ-21 (14/08/2026): escrita na watchlist era publica, qualquer um
+// alterava o universo que o scan diario coleta. Agora exige o secret.
+watchlistRoutes.post('/', requireIngestSecret, async (c) => {
   let body: { symbol?: unknown }
   try {
     body = await c.req.json()
@@ -58,7 +61,7 @@ watchlistRoutes.post('/', async (c) => {
   return c.json({ ok: true, symbols: next })
 })
 
-watchlistRoutes.post('/remove', async (c) => {
+watchlistRoutes.post('/remove', requireIngestSecret, async (c) => {
   let body: { symbol?: unknown }
   try {
     body = await c.req.json()

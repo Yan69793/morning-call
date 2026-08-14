@@ -5,6 +5,11 @@ main = "src/index.ts"
 compatibility_date = "2026-07-01"
 compatibility_flags = ["nodejs_compat"]
 
+# MC-029 (14/08/2026): /trigger-now so abre sem secret quando ENVIRONMENT
+# nao e "production". O valor de producao precisa existir no deploy real.
+[vars]
+ENVIRONMENT = "production"
+
 # Cron em UTC. BRT é UTC-3 fixo (o Brasil não observa horário de verão desde 2019).
 #   "30 9  * * 1-5" = 06:30 BRT, geração do Morning Call.
 #   "30 21 * * 1-5" = 18:30 BRT, marcação a mercado dos trades abertos.
