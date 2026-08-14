@@ -8,10 +8,15 @@ Os blocos 1 e 3 foram executados na mesma sessão da auditoria. Achados RESOLVID
 
 - `5af5ae5` fix(briefing-interno): W01, W02, W03, T01, T02, T03, T05, O02, I01. Exit codes reais para o Task Scheduler, fronteiras do OpenRouter/Resend/VixRadar com validação, GDELT com query corrigida e 429 distinto no log, URLs lidas do `.env`. 13 testes novos.
 - `5fa7118` fix(radar-quant): B-004 a B-007. Null-vs-zero eliminado do gate de sinais, dado ausente nunca vota LONG, VIX ausente fecha o gate, payload do scan com guards antes do motor. 6 testes novos. Portão do monorepo verde (287 testes, typecheck e lint limpos).
+- `5ba45aa` fix: bloco 2 de segurança. MC-021/022/028/029 (CORS fail-closed via `CORS_ORIGINS`, trigger com `TRIGGER_SECRET` próprio e fail-closed, secret via header, `/trigger-now` só abre fora de produção) e RQ-20/21/25/32 (auth nas rotas de generate e watchlist, timeout de 30s no Anthropic, chave do cooldown normalizada). 14 testes novos. Portão verde (301 testes, typecheck e lint limpos).
 
 Mudança operacional a saber: o coletor de estado agora trata a resposta do VixRadar como FALHOU quando ela não traz `status` string (antes virava "Status: ?" no briefing). Se a seção VixRadar sumir do briefing de amanhã, é isso, e a correção é o Worker expor um campo `status`.
 
-Deploy continua pendente de ação humana explícita: DEPLOY-01/02 e o bump do hono (RQ-10) são o bloco 2, ainda não executado.
+O que falta para fechar a rodada (ação humana, deploy):
+
+1. Criar o secret `TRIGGER_SECRET` no worker morning-call (`wrangler secret put` ou dashboard). Sem ele, `/trigger` nega sempre, que é o comportamento correto, mas o endpoint fica inoperante.
+2. Definir `CORS_ORIGINS` no worker morning-call (lista separada por vírgula, pergunta aberta P-02). Sem a var, nenhuma origem passa.
+3. Deploy dos dois Workers: morning-call (com ENVIRONMENT=production já no wrangler.toml) e radar-quant-brasil, este último junto com o bump do hono (RQ-10, `npm audit fix` em `apps/radar-quant/worker`). Os deploys resolvem DEPLOY-01/DEPLOY-02.
 
 ## Síntese
 
