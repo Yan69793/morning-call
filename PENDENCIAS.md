@@ -18,6 +18,13 @@ O que falta para fechar a rodada (ação humana, deploy):
 2. Definir `CORS_ORIGINS` no worker morning-call (lista separada por vírgula, pergunta aberta P-02). Sem a var, nenhuma origem passa.
 3. Deploy dos dois Workers: morning-call (com ENVIRONMENT=production já no wrangler.toml) e radar-quant-brasil, este último junto com o bump do hono (RQ-10, `npm audit fix` em `apps/radar-quant/worker`). Os deploys resolvem DEPLOY-01/DEPLOY-02.
 
+### Deploy executado em 14/08 (noite)
+
+- `41337b4`: CORS_ORIGINS definida no wrangler.toml do morning-call ("https://radar-quant-brasil.pages.dev,https://vixradar.com", par simétrico do radar-quant, editável) + `npm audit fix` no monorepo, hono 4.13.2, 0 vulnerabilidades.
+- Deploy autorizado pelo Yan e executado: `radar-quant-brasil` versão `7483a9af` e `morning-call` versão `dced04ff`. DEPLOY-01 e DEPLOY-02 RESOLVIDOS (produção agora tem o gate anti-eco de 06/08 e o CORS fail-closed de `ceee10c`), RQ-10 RESOLVIDO (hono 4.13.2 no ar).
+- Verificação em produção com curl.exe: health ok nos dois; CORS do morning-call não ecoa origem atacante e ecoa a lista; `/trigger` sem secret 401; POST watchlist e signals/generate sem secret 401; GET watchlist segue público.
+- RESTA 1 item: criar o secret `TRIGGER_SECRET` no worker morning-call. Até lá, `/trigger` nega sempre (fail-closed correto). O briefing das 07h00 não depende dele, só o trigger manual.
+
 ## Síntese
 
 1. Dois achados críticos no Worker morning-call, ambos violando a regra da casa de segurança: CORS `*` hardcoded (MC-021) e o trigger com fallback fail-open `|| "debug"` (MC-022). A rota `/trigger-now` sem auth nenhuma (MC-029) fecha o trio.
