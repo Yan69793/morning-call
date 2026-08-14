@@ -2,6 +2,17 @@
 
 Primeira execução: 2026-08-14. Protocolo: skill `auditoria-pendencias`, 16 dimensões (10 base + 6 Cloudflare/LLM cascade). Método: 4 auditores paralelos por módulo (`apps/morning-call`, `apps/radar-quant`, `packages/analytics`, `briefing-interno`) + verificação de deploy via Cloudflare API + conferência dos achados de topo no código. 116 achados brutos, 80 sobreviveram à dedup e ao corte de itens cosméticos. Status: primeira execução, todos NOVO.
 
+## Nota de atualização (14/08, noite)
+
+Os blocos 1 e 3 foram executados na mesma sessão da auditoria. Achados RESOLVIDOS em código (o próximo `repeat-run` marca o status formal na tabela):
+
+- `5af5ae5` fix(briefing-interno): W01, W02, W03, T01, T02, T03, T05, O02, I01. Exit codes reais para o Task Scheduler, fronteiras do OpenRouter/Resend/VixRadar com validação, GDELT com query corrigida e 429 distinto no log, URLs lidas do `.env`. 13 testes novos.
+- `5fa7118` fix(radar-quant): B-004 a B-007. Null-vs-zero eliminado do gate de sinais, dado ausente nunca vota LONG, VIX ausente fecha o gate, payload do scan com guards antes do motor. 6 testes novos. Portão do monorepo verde (287 testes, typecheck e lint limpos).
+
+Mudança operacional a saber: o coletor de estado agora trata a resposta do VixRadar como FALHOU quando ela não traz `status` string (antes virava "Status: ?" no briefing). Se a seção VixRadar sumir do briefing de amanhã, é isso, e a correção é o Worker expor um campo `status`.
+
+Deploy continua pendente de ação humana explícita: DEPLOY-01/02 e o bump do hono (RQ-10) são o bloco 2, ainda não executado.
+
 ## Síntese
 
 1. Dois achados críticos no Worker morning-call, ambos violando a regra da casa de segurança: CORS `*` hardcoded (MC-021) e o trigger com fallback fail-open `|| "debug"` (MC-022). A rota `/trigger-now` sem auth nenhuma (MC-029) fecha o trio.
