@@ -6,6 +6,9 @@ import { todayTradeDateBrt } from "./data/calendar.js";
 import { isMarkCron } from "./cron.js";
 import { MorningCallWorkflow } from "./workflow.js";
 import { getLatestReport, type ReportPayload } from "./db/runs.js";
+import { getOpenTrades, saveMark } from "./db/trades.js";
+import { fetchInstrumentPrice } from "./data/prices.js";
+import { runMarkCron } from "./report/run-mark.js";
 
 export type { Env };
 export { MorningCallWorkflow };
@@ -168,12 +171,34 @@ export default {
 
   scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext): void {
     if (isMarkCron(controller.cron)) {
-      console.log(
-        JSON.stringify({
-          event: "mark_cron_noop",
-          cron: controller.cron,
-          note: "markTrade pronto em report/mark.ts; falta feed de preço",
-        }),
+      const tradeDate = todayTradeDateBrt();
+      const markedAt = new Date().toISOString();
+      ctx.waitUntil(
+        runMarkCron(tradeDate, markedAt, {
+          getOpenTrades: () => getOpenTrades(env.DB),
+          fetchPrice: (instrumento, d, o) => fetchInstrumentPrice(instrumento, d, o),
+          saveMark: (row) => saveMark(env.DB, row),
+        })
+          .then((result) => {
+            console.log(
+              JSON.stringify({
+                event: "mark_cron_done",
+                cron: controller.cron,
+                trade_date: tradeDate,
+                marcados: result.marcados.length,
+                pulados: result.pulados,
+              }),
+            );
+          })
+          .catch((err) => {
+            console.error(
+              JSON.stringify({
+                event: "mark_cron_failed",
+                cron: controller.cron,
+                error: err instanceof Error ? err.message : String(err),
+              }),
+            );
+          }),
       );
       return;
     }
