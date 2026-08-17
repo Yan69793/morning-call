@@ -19,7 +19,7 @@
 # Uso: powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\register-scan-diario-task.ps1"
 
 $ErrorActionPreference = 'Stop'
-$ProjectRoot = 'E:\Diretorio\Claude\Morning Call\apps\radar-quant'
+$ProjectRoot = 'E:\Diretorio\Claude\FREQUENTE\Morning Call\apps\radar-quant'
 $ScriptPath  = Join-Path $ProjectRoot 'scripts\run-daily-scan.ps1'
 $WorkDir     = Join-Path $ProjectRoot 'scripts'
 
