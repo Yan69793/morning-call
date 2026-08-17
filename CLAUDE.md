@@ -1,5 +1,9 @@
 # CLAUDE.md — Morning Call + Radar Quant (hardened 2026-07-25)
 
+## Estado do projeto
+
+Página canônica de estado, legível por qualquer agente (não só Claude): `status/ESTADO.md`. Ler antes de começar sessão de trabalho, atualizar a data e os itens ao fechar uma sessão que mudou o estado.
+
 Monorepo npm workspaces: `apps/morning-call/`, `apps/radar-quant/`, `packages/analytics/`.
 Documentos irmãos: `ARCHITECTURE.md`, `IMPLEMENTATION_PLAN.md`, `docs/DATA_SOURCES.md`.
 
