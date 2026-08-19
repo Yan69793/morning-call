@@ -326,6 +326,20 @@ def _bullet_row(segments):
 
 def build_styled_email(html_content: str, data_fmt: str) -> str:
     """Monta o e-mail do briefing com a paleta do relatorio diario."""
+    # Ordem do Yan em 19/08/2026, em definitivo ate nova ordem: o e-mail sai
+    # SEM as fontes dos pontos do O QUE IMPORTA HOJE. Remove a ancora
+    # <a>...</a> inteira (rotulo do veiculo) DENTRO dessa secao, antes do
+    # parse. So o e-mail muda; o arquivo em disco mantem as fontes, o
+    # validador segue trabalhando sobre o conteudo puro.
+    m = re.search(
+        r"<h1>O QUE IMPORTA HOJE</h1>(.*?)(?=<h1>|$)",
+        html_content,
+        flags=re.DOTALL | re.IGNORECASE,
+    )
+    if m:
+        seg = re.sub(r"<a\b[^>]*>.*?</a>", "", m.group(1), flags=re.DOTALL)
+        html_content = html_content[: m.start(1)] + seg + html_content[m.end(1) :]
+
     parser = _BriefingContent()
     parser.feed(html_content)
     parser.finish()

@@ -114,6 +114,8 @@ O e-mail do briefing saiu do HTML cru e passou a usar a paleta e a formatacao do
 
 Duas decisoes do Yan no mesmo dia, tambem so visuais: a citacao de fonte (colchetes com URL) e o parentese de confianca sao REMOVIDOS do e-mail pelo `_strip_fonte_e_confianca`. O arquivo em disco mantem os dois, porque o validador depende deles (REGRA 1 e REGRA 2). Colchete que nao parece URL fica, como a anotacao do fallback do Yahoo Finance. Se um dia o validador deixar de exigir confianca ou fonte, revisar esta remocao antes de mexer.
 
+Em 19/08/2026 o Yan mandou retirar tambem, em definitivo ate nova ordem dele, as fontes dos pontos do O QUE IMPORTA HOJE no e-mail: o rotulo do veiculo (`<a href="URL">InfoMoney</a>`) saiu do e-mail inteiro, secao O QUE IMPORTA HOJE apenas. A remocao fica em `build_styled_email` (antes do parse), nao no `_strip_fonte_e_confianca`, e so o e-mail muda: o arquivo em disco segue com as fontes, o validador segue trabalhando sobre o conteudo puro. Para voltar, remover o bloco comentado "Ordem do Yan em 19/08/2026" em `enviar_briefing.py`.
+
 ## Decisoes de produto de 13/08/2026
 
 - Secoes 5 (RADAR QUANT) e 6 (MORNING CALL) retiradas do briefing. O prompt nao pede mais as duas, a agenda virou a secao 5.
