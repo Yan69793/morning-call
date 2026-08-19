@@ -29,6 +29,24 @@ Task Scheduler (07h00, dias uteis)
         -> enviar_briefing.py     (Resend)
 ```
 
+## Fallback remoto (sz-briefing-remote)
+
+Desde 19/08/2026 existe um Worker Cloudflare em `remote/` que cobre o cenario de
+PC desligado ou falha do Task Scheduler as 07h00. Cron proprio (07:05 retry
+07:35, watchdog 07:40 BRT), Durable Object para claim atomico com o local
+(nunca duas entregas no mesmo dia), KV como espelho consultavel via
+`GET https://sz-briefing-remote.prospects-intel.workers.dev/health`.
+
+Ele nunca envia e-mail sozinho: gera, valida, segura e avisa o Yan por e-mail
+(RESEND_API_KEY, ALERT_EMAIL ja configurados), que aprova o envio manual via
+`POST /run?date=YYYYMMDD` autenticado (sem `dry`). Bate com a proibicao de
+reenvio automatico dada em 18/08. Detalhe da sessao que deployou e da trava
+em `status/ESTADO.md`, secao "Estado do briefing-interno em 2026-08-19".
+
+Local continua sendo o caminho principal e o unico com `--clientes`; o remote
+so entra se o local nao reivindicar o dia (`scripts/claim_remote.py`, best
+effort, nunca bloqueia o local se o Worker estiver fora do ar).
+
 ## Portao de verificacao
 
 Antes de declarar qualquer tarefa concluida, execute:

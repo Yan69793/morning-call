@@ -1,6 +1,6 @@
 # Estado do projeto — Morning Call
 
-Última atualização: 2026-08-18 (agente: Claude Code)
+Última atualização: 2026-08-19 (agente: Claude Code)
 
 Leia este arquivo antes de começar qualquer trabalho, seja qual for o agente.
 Atualize a data e os itens abertos ao fechar uma sessão que mudou o estado.
@@ -66,6 +66,8 @@ python briefing-interno/scripts/validar_briefing.py briefing-interno/outputs/bri
 - Sem pendências abertas registradas no CLAUDE.md.
 - Pendências e perguntas da auditoria em aberto (P-10 a P-15; RQ-34 corrigido mas não
   commitado na sessão de 17/08): ver `PENDENCIAS.md`.
+- `briefing-interno/remote/` (Worker `sz-briefing-remote`): nenhuma, trava de segurança
+  aplicada e commitada em 19/08. Ver seção abaixo.
 
 ## Estado do briefing-interno em 2026-08-18
 
@@ -83,3 +85,28 @@ no pool. Envio real às 21:06:49 confirmado pelo Resend (sentinela `sent_2026081
 As tasks `Szuchmacher-BriefingMatinal` (07h00) e `Szuchmacher-BriefingWatchdog` (07h20)
 seguem Ready, e o `.env` usa `OPENROUTER_MODEL=google/gemma-3-27b-it` sem sufixo. Detalhe
 no `briefing-interno/CLAUDE.md` e nos logs de `briefing-interno/logs/`.
+
+## Estado do briefing-interno em 2026-08-19: fallback remoto
+
+Sessão anterior (madrugada) deployou `briefing-interno/remote/` como Worker Cloudflare
+(`sz-briefing-remote`, KV real, Durable Object, os 7 secrets aplicados) para cobrir o
+cenário de PC desligado às 07h00, mas deixou o código sem commit e sem trava contra envio
+automático. Esta sessão fechou os dois:
+
+- Cron e watchdog do Worker mandavam e-mail real sozinho, sem revisão, contradizendo a
+  proibição de reenvio automático que o Yan já tinha dado em 18/08. Trocado por
+  segurar-e-avisar nos três pontos (cron principal, retry, recuperação do watchdog): o
+  Worker gera, valida, nunca envia sozinho, e avisa por e-mail com instrução de como
+  aprovar o envio manual. Commit `1f0c5c6`, publicado em `origin/main`.
+- Testado de ponta a ponta com data sintética (nunca toca o estado real de hoje): ciclo
+  completo rodou limpo, 55 feeds RSS, 5 URLs aprovadas, validação aprovada, nada enviado
+  de verdade (modo seguro).
+- Testes: 34/34 (`node --test` em `remote/`), rodado de verdade nesta sessão.
+- Fora de escopo, não tocado: a reestruturação em andamento de `apps/radar-quant` para
+  `radar-quant-brasil/` e as mudanças de config de raiz que estavam soltas na árvore
+  antes desta sessão. O commit `1f0c5c6` cobre só os arquivos do `briefing-interno/`.
+
+Nada pendente deste lado. Próximo teste real é o cron de hoje às 07:05 BRT (retry 07:35),
+que deve ficar em silêncio porque o local reivindica primeiro; conferir depois pelo
+`GET https://sz-briefing-remote.prospects-intel.workers.dev/health`, sem testar de novo
+por cima.
