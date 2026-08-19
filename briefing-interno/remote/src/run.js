@@ -70,7 +70,7 @@ export async function runPipeline({
     await heartbeat(env, pipeline, { date, step, run_id: runId, extras });
     // Renova a reserva no DO: execucao viva nunca expira.
     if (!dry) {
-      const r = await doCall("/renew", { date, claimant, run_id: run_id, ttl_ms: TTL_MS });
+      const r = await doCall("/renew", { date, claimant, run_id: runId, ttl_ms: TTL_MS });
       if (!r.ok) {
         const err = new Error("reserva_perdida");
         err.code = "RESERVA_PERDIDA";

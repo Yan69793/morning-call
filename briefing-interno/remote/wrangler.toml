@@ -35,7 +35,7 @@ RECOVER_ON_WATCHDOG = "true"
 
 [[kv_namespaces]]
 binding = "STATE_KV"
-id = "KV_PLACEHOLDER"
+id = "89432bb241e14edfb8eaf3b943a85e93"
 
 [durable_objects]
 bindings = [{ name = "PIPELINE_STATE", class_name = "PipelineStateDO" }]

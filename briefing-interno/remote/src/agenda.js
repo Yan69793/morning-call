@@ -1104,13 +1104,15 @@ export function buildAgenda(hojeISO, ibgeItems, opts = {}) {
 // brtIsoNow: timestamp ISO-8601 em BRT (UTC-3 fixo), formato usado pelo Python
 // (ex.: "2026-08-18T21:00:00-03:00"). Cosmético, usado no campo `gerado`.
 export function brtIsoNow(now) {
-  const d = new Date((now || new Date()).getTime() - 3 * 3600 * 1000);
+  const ms = now == null ? Date.now() : typeof now === "number" ? now : now.getTime();
+  const d = new Date(ms - 3 * 3600 * 1000);
   const iso = d.toISOString().slice(0, 19);
   return `${iso}-03:00`;
 }
 
 // brtToday: data BRT atual no formato YYYYMMDD (o "hoje" dos pipelines).
 export function brtToday(now) {
-  const d = new Date((now || new Date()).getTime() - 3 * 3600 * 1000);
+  const ms = now == null ? Date.now() : typeof now === "number" ? now : now.getTime();
+  const d = new Date(ms - 3 * 3600 * 1000);
   return d.toISOString().slice(0, 10).replace(/-/g, "");
 }

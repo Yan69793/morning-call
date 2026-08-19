@@ -61,7 +61,7 @@ export async function watchdog({ env, ctx, dateTag, trigger = "cron", fetchImpl,
     return await resp.json();
   };
 
-  const { state, reserva } = await doCall("/state", { date });
+  let { state, reserva } = await doCall("/state", { date });
 
   if (state && state.status === "sent") {
     await watchdogUltimo(env, pipeline, { status: "ok", execution_mode: state.execution_mode });
@@ -83,15 +83,14 @@ export async function watchdog({ env, ctx, dateTag, trigger = "cron", fetchImpl,
 
   if (podeRecover) {
     await heartbeat(env, pipeline, { date, step: "watchdog_recover", run_id: null });
-    await runPipeline({ env, ctx, dateTag: date, mode: "remote", dry: false, trigger: "watchdog-recover", fetchImpl, nowMs });
+    // dry:true sempre — recuperacao automatica gera e valida, nunca envia sozinha (plano 2026-08-19).
+    await runPipeline({ env, ctx, dateTag: date, mode: "remote", dry: true, trigger: "watchdog-recover", fetchImpl, nowMs });
     const after = await doCall("/state", { date });
-    if (after.state && after.state.status === "sent") {
-      await watchdogUltimo(env, pipeline, { status: "ok_recovered" });
-      return { pipeline, date, status: "ok_recovered" };
-    }
+    if (after.state) state = after.state;
   }
 
   const modo = state ? state.execution_mode : "desconhecido";
+  const pronto = !!(state && state.validation_status === "aprovado" && state.delivery_status === "dry");
   const erro = state
     ? `${state.error_code || "sem erro registrado"}: ${state.error_summary || ""}`
     : "nenhuma execucao reivindicou o dia (cron pode nao ter despachado)";
@@ -99,15 +98,18 @@ export async function watchdog({ env, ctx, dateTag, trigger = "cron", fetchImpl,
     modo === "local" || !state
       ? " Se o pipeline local tiver enviado, a sentinela local cobre o caso (worker fora do ar na janela do claim)."
       : "";
+  const comoEnviar = `Para enviar de verdade: POST https://sz-briefing-remote.prospects-intel.workers.dev/run?date=${date} com header x-run-trigger-key (sem ?dry=1).`;
 
   await enviarAlerta({
     env,
-    subject: `ALERTA: Briefing Matinal ${date}`,
-    text:
-      `Briefing Matinal ${date} nao foi enviado dentro da janela esperada. ` +
-      `Modo: ${modo}. ${erro}.${avisoLocal}`,
+    subject: pronto
+      ? `REVISAO: Briefing Matinal ${date} pronto, aguardando envio`
+      : `ALERTA: Briefing Matinal ${date}`,
+    text: pronto
+      ? `Briefing Matinal ${date} foi gerado e APROVADO no validador, mas nao foi enviado, modo seguro, nada sai sem sua revisao. ${comoEnviar}`
+      : `Briefing Matinal ${date} nao foi enviado dentro da janela esperada. Modo: ${modo}. ${erro}.${avisoLocal}`,
     fetchImpl,
   });
-  await watchdogUltimo(env, pipeline, { status: "alerta", state });
-  return { pipeline, date, status: "alerta", modo, erro };
+  await watchdogUltimo(env, pipeline, { status: pronto ? "revisao_pendente" : "alerta", state });
+  return { pipeline, date, status: pronto ? "revisao_pendente" : "alerta", modo, erro };
 }

@@ -90,7 +90,13 @@ export class PipelineStateDO {
     let attempts = 1;
     let retried = false;
     if (st && st.status === "processing") {
-      const podeTomar = force || (st.execution_mode === "remote" && (st.attempts || 1) < 2);
+      // Takeover: falha LOCAL nunca e re-executada pelo REMOTE (a regra
+      // conservadora anti-duplicidade). Mas o proprio local pode retomar a
+      // propria corrida morta (reserva expirada + modo local).
+      const podeTomar =
+        force ||
+        (st.execution_mode === "remote" && (st.attempts || 1) < 2) ||
+        (st.execution_mode === "local" && claimant === "local");
       if (!podeTomar) {
         return {
           granted: false,

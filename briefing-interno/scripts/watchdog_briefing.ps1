@@ -50,6 +50,25 @@ if ($enviado) {
     exit 0
 }
 
+# Estado remoto: se o Remote (sz-briefing-remote) enviou ou esta processando,
+# nao alertar. Exit 0 do --status = sent, exit 1 = processing.
+$claimScript = Join-Path $ProjectRoot 'scripts\claim_remote.py'
+if (Test-Path $claimScript) {
+    $py = (Get-Command python -ErrorAction SilentlyContinue).Source
+    if ($py) {
+        & $py $claimScript --status $DateTag *> $null
+        $remoteExit = $LASTEXITCODE
+        if ($remoteExit -eq 0) {
+            Write-Host "WATCHDOG: estado remoto = enviado. Nada a verificar."
+            exit 0
+        }
+        if ($remoteExit -eq 1) {
+            Write-Host "WATCHDOG: estado remoto = em andamento. Nada a verificar."
+            exit 0
+        }
+    }
+}
+
 # Nada encontrado — alertar
 $alertLine = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') WATCHDOG: ALERTA briefing $DateTag NAO foi enviado"
 Write-Host $alertLine

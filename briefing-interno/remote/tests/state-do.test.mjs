@@ -82,6 +82,14 @@ test("falha local nunca e re-executada pelo remote (stale, sem takeover)", async
   assert.equal(c.reason, "stale");
 });
 
+test("o proprio local retoma a propria corrida morta (reserva expirada)", async () => {
+  const do1 = makeDo();
+  await do1.claim({ date: DIA, claimant: "local", run_id: "r1", ttl_ms: 600000 });
+  const c = await do1.claim({ date: DIA, claimant: "local", run_id: "r2", ttl_ms: 0 });
+  assert.equal(c.granted, true);
+  assert.equal(c.state.attempts, 2);
+});
+
 test("falha remota com attempts < 2 permite takeover unico (retry)", async () => {
   const do1 = makeDo();
   await do1.claim({ date: DIA, claimant: "remote", run_id: "r1", ttl_ms: 600000 });

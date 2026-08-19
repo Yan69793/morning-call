@@ -43,29 +43,28 @@ async function doCall(env, path, body) {
 async function health(env, nowMs) {
   const now = nowMs || Date.now();
   const date = brtToday(now);
-  const stateRaw = await env.STATE_KV.get(`briefing:state:${date}`);
-  let state = null;
+  const out = { pipeline: "briefing", date, ok: true, kv_bound: !!env.STATE_KV, do_bound: !!env.PIPELINE_STATE };
   try {
-    state = stateRaw ? JSON.parse(stateRaw) : null;
-  } catch {
-    state = null;
+    if (!env.STATE_KV) {
+      out.ok = false;
+      out.error = "STATE_KV_unbound";
+      return out;
+    }
+    const stateRaw = await env.STATE_KV.get(`briefing:state:${date}`);
+    let state = null;
+    try { state = stateRaw ? JSON.parse(stateRaw) : null; } catch { state = null; }
+    const hbRaw = await env.STATE_KV.get(`briefing:heartbeat:${date}`);
+    let heartbeat = null;
+    try { heartbeat = hbRaw ? JSON.parse(hbRaw) : null; } catch { heartbeat = null; }
+    out.state = state;
+    out.heartbeat = heartbeat;
+    out.cron_ultimo = await getCronUltimo(env, "briefing");
+    out.watchdog_ultimo = await getWatchdogUltimo(env, "briefing");
+  } catch (err) {
+    out.ok = false;
+    out.error = String(err && err.message ? err.message : err).slice(0, 300);
   }
-  const hbRaw = await env.STATE_KV.get("briefing:heartbeat");
-  let heartbeat = null;
-  try {
-    heartbeat = hbRaw ? JSON.parse(hbRaw) : null;
-  } catch {
-    heartbeat = null;
-  }
-  return {
-    pipeline: "briefing",
-    date,
-    state,
-    heartbeat,
-    cron_ultimo: await getCronUltimo(env, "briefing"),
-    watchdog_ultimo: await getWatchdogUltimo(env, "briefing"),
-    ts: new Date(now).toISOString(),
-  };
+  return out;
 }
 
 export default {
@@ -130,10 +129,11 @@ export default {
       { expirationTtl: 30 * 86400 },
     );
     if (event.cron === CRON_RUN) {
-      return runPipeline({ env, ctx, mode: "remote", trigger: "cron-run" });
+      // dry:true sempre — cron nunca envia sozinho, so segura e avisa (plano 2026-08-19).
+      return runPipeline({ env, ctx, mode: "remote", dry: true, trigger: "cron-run" });
     }
     if (event.cron === CRON_RETRY) {
-      return runPipeline({ env, ctx, mode: "remote", trigger: "cron-retry" });
+      return runPipeline({ env, ctx, mode: "remote", dry: true, trigger: "cron-retry" });
     }
     if (event.cron === CRON_WATCHDOG) {
       return watchdog({ env, ctx, trigger: "cron-watchdog" });

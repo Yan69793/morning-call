@@ -13,6 +13,7 @@ $ProjectRoot = Split-Path -Parent $ScriptRoot
 $DateTag = Get-Date -Format 'yyyyMMdd'
 $LogDir = Join-Path $ProjectRoot 'logs'
 $LogFile = Join-Path $LogDir "briefing_${DateTag}_py.log"
+$SentinelPath = Join-Path $LogDir "sent_${DateTag}.flag"
 
 # Garantir diretorio de log
 New-Item -ItemType Directory -Force -Path $LogDir -ErrorAction SilentlyContinue | Out-Null
@@ -112,6 +113,42 @@ if ($exitCode -ne 0) {
 }
 
 # ============================================================
+# PASSO 2.5: claim no estado remoto (best-effort)
+# ============================================================
+# O Worker remoto (sz-briefing-remote) e o fallback do dia em que o PC esta
+# desligado. O claim atomico no Durable Object garante UMA entrega por dia,
+# vinda de quem chegar primeiro. Sem worker/chave, o Local segue como sempre.
+$claimExit = Run-Python (Join-Path $ScriptRoot 'claim_remote.py') @('--claim', $DateTag)
+Log "claim_remote.py exit $claimExit"
+$claimFile = Join-Path $LogDir "claim_remote_${DateTag}.json"
+$claimStatus = 'inacessivel'
+if (Test-Path $claimFile) {
+    try {
+        $claimStatus = (Get-Content $claimFile -Raw -Encoding UTF8 | ConvertFrom-Json).status
+    } catch {
+        $claimStatus = 'inacessivel'
+    }
+}
+if ($claimStatus -eq 'ja_enviado') {
+    # O Remote ja enviou: espelhar sentinela local e encerrar sem reenviar.
+    Log "JA ENVIADO (remoto): briefing $DateTag enviado pela execucao remota. Nada reenviado."
+    New-Item -ItemType Directory -Force -Path $LogDir -ErrorAction SilentlyContinue | Out-Null
+    Set-Content -Path $SentinelPath -Value (Get-Date -Format 'yyyy-MM-ddTHH:mm:sszzz') -Encoding UTF8
+    Log "ENVIADO OK: briefing matinal enviado com sucesso (remoto)."
+    exit 0
+}
+if ($claimStatus -eq 'ja_reservado') {
+    Log "REMOTO EM ANDAMENTO: outra execucao reivindicou o dia. Local nao envia."
+    exit 0
+}
+if ($claimStatus -eq 'bloqueado') {
+    Log "AVISO: claim remoto bloqueado (motivo no claim_remote_${DateTag}.json). Seguindo local."
+}
+if ($claimStatus -eq 'inacessivel') {
+    Log "AVISO: estado remoto inacessivel. Seguindo local, sentinela local governa."
+}
+
+# ============================================================
 # PASSO 3: gerar briefing
 # ============================================================
 # PASSOS 3 e 4 rodam juntos num laco de tentativas (18/08/2026).
@@ -174,8 +211,7 @@ Log "PASSO 5: enviar_briefing.py"
 # produzia log que afirma envio numa execucao que nao enviou nada. O projeto
 # irmao (relatorio-diario) ja teve esse mesmo falso "ENVIADO OK" e corrigiu.
 # A sentinela e lida ANTES da chamada para separar os dois casos.
-$sentinelPath = Join-Path $ProjectRoot "logs" "sent_${DateTag}.flag"
-$jaEnviadoAntes = Test-Path $sentinelPath
+$jaEnviadoAntes = Test-Path $SentinelPath
 
 $exitCode = Run-Python (Join-Path $ScriptRoot 'enviar_briefing.py') @($briefingPath)
 Log "enviar_briefing.py exit $exitCode"
@@ -187,6 +223,10 @@ if ($exitCode -eq 0) {
         Log "JA ENVIADO: briefing $DateTag tinha sentinela previa. Nada reenviado nesta execucao."
     } else {
         Log "ENVIADO OK: briefing matinal enviado com sucesso."
+        # PASSO 5.5: registrar o envio no estado remoto (best-effort), para o
+        # cron remoto das 07:05 ver "sent" e pular, em vez de gerar de novo.
+        $completeExit = Run-Python (Join-Path $ScriptRoot 'claim_remote.py') @('--complete', $DateTag)
+        Log "claim_remote.py --complete exit $completeExit"
     }
 } else {
     Log "ERRO: envio falhou (exit $exitCode)."
