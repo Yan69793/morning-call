@@ -146,6 +146,12 @@ Na mesma tarde o Yan decidiu: **o briefing nao vai mais para clientes, sempre e 
 - Nenhuma task do Task Scheduler envia para clientes (a `Szuchmacher-EnvioClientes` era unica e se auto-removeu em 14/08).
 - O visual "PANORAMA DIARIO" com logo Szuchmacher fica como esta, agora direcionado ao Yan.
 
+## Excecao de 19/08/2026: envio pontual a lista do Fechamento, decisao de 14/08 segue como padrao
+
+O Yan mandou explicitamente soltar o briefing de 19/08 para a lista de clientes do relatorio diario: 21 enderecos do `.env` do Fechamento, BCC real, sem duplicacao (o dedup interno do modo `--clientes` cuida disso). Executado as 08:59:57 BRT via `enviar_briefing.py --clientes`, com flag `logs/aprovacao_clientes_20260819.flag`, sentinela `sent_clientes_20260819.flag`, Resend ID `eafcb6d1-a033-4971-b2e2-73580cd836d8`, validador rodado dentro do proprio script antes do envio (prevencao F03). A lista do Fechamento ja continha os dois enderecos do envio interno (szuchmacheryan, yaragarbo9), entao os dois receberam segunda copia no dia; nenhum outro destinatario recebeu duplicata.
+
+A decisao de 14/08 segue como padrao: envio a clientes continua exigindo ordem direta do Yan, flag de aprovacao do dia e a lista viva do `.env` do Fechamento. Nada mudou no fluxo das 07h00.
+
 ## Envio avulso para outro destinatario
 
 `enviar_briefing.py` aceita `--to email@x.com` para mandar uma copia para outro endereco sem mexer no `.env`. A validacao e a sentinela de idempotencia continuam valendo. Pedido do Yan em 13/08 para revisar o material em outra caixa.
