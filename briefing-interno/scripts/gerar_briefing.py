@@ -39,7 +39,11 @@ REGRAS ABSOLUTAS:
    Copie a URL EXATAMENTE como esta no pool, caractere por caractere, mantendo https://,
    o dominio original e o final do caminho. Nao encurte, nao troque dominio, nao invente
    extensao (.ghtml). URL errada e pior que nenhuma URL.
-2. Toda chamada direcional PRECISA declarar confianca entre 0.0 e 1.0.
+2. Toda chamada direcional PRECISA declarar confianca entre 0.0 e 1.0, no formato EXATO
+   "confianca: X.X" (a palavra confianca, dois pontos, espaco, numero com ponto decimal),
+   entre parenteses logo apos a frase direcional, por exemplo "(confianca: 0.7)". O validador
+   so reconhece esse formato literal, prosa como "com uma confianca de 0.7" ou "confianca
+   de 0.7" NAO conta e reprova o briefing inteiro.
    confianca alta (0.7+) = multiplas fontes confirmam. confianca baixa (0.3-) = fonte unica ou correlacao incerta.
 3. NUNCA cite um projeto que nao esta na lista de projetos fornecida.
    NUNCA cite um projeto com exposicao vazia ([]). Esses projetos NAO TEM relacao com mercado.
@@ -60,8 +64,9 @@ FORMATO DO BRIEFING (HTML):
      <b>Titulo do evento ou movimento.</b> Em seguida 2-3 frases com numeros
      exatos e comparacao historica, e a ultima frase diz por que importa
      (efeito em preco, taxa, spread ou dolar). A chamada direcional fica
-     embutida na prosa, com fonte_url e confianca declarada, nunca como
-     recomendacao de compra ou venda. OBRIGATORIO: cada ponto precisa de pelo
+     embutida na prosa, com fonte_url e confianca no formato exato da REGRA 2
+     ("confianca: X.X"), nunca como recomendacao de compra ou venda. OBRIGATORIO: cada
+     ponto precisa de pelo
      menos uma frase com leitura direcional explicita no padrao "tende a
      subir/cair", "deve pressionar", "vies de alta/baixa" ou "pressao de
      alta/baixa", porque o validador reprova briefing sem chamada direcional.
@@ -219,7 +224,7 @@ def _build_user_prompt(
 
     partes.append("")
     partes.append("INSTRUCAO: Gere o briefing matinal em HTML self-contained.")
-    partes.append("Inclua chamadas direcionais com fonte_url e confianca.")
+    partes.append("Inclua chamadas direcionais com fonte_url e confianca no formato exato 'confianca: X.X' entre parenteses (ex.: (confianca: 0.7)).")
     partes.append("NAO cite projetos com exposicao vazia.")
     partes.append("Se Radar Quant stale >= 2 dias consecutivos, suprima a secao e reporte a indisponibilidade.")
     partes.append("Retorne APENAS o HTML, sem texto antes ou depois.")
@@ -355,11 +360,24 @@ def main(argv: list[str]) -> int:
     if fallback_model:
         models_to_try.append(fallback_model)
 
-    # Sufixo :online so para modelos que suportam (Gemini, nao DeepSeek)
-    models_to_try = [
-        f"{m}{WEB_SEARCH_SUFFIX}" if m.startswith("google/") and not m.endswith(WEB_SEARCH_SUFFIX) else m
-        for m in models_to_try
-    ]
+    # WEB_SEARCH_SUFFIX (:online) desativado em 18/08/2026. Nao reativar sem mudar a REGRA 1.
+    #
+    # O sufixo dava web search ao modelo, que passava a citar URLs encontradas navegando.
+    # A REGRA 1 do validar_briefing.py exige que toda URL citada esteja no pool de noticias
+    # coletado por coletar_noticias.py. As duas coisas sao incompativeis por construcao: o
+    # modelo com acesso a web sempre encontra fonte fora do pool, e o portao sempre reprova.
+    #
+    # Resultado observado: REPROVADO em 13, 14, 17 e 18/08/2026, quatro dias uteis seguidos
+    # sem nenhuma entrega. O watchdog alertou todos os dias, o alerta nao virou acao.
+    #
+    # A decisao do projeto sobre a REGRA 1 e explicita no CLAUDE.md: "Corrigir a citacao no
+    # arquivo quando acontecer, nao afrouxar a regra." Entao quem sai e o web search, nao o
+    # portao. O modelo continua recebendo o pool inteiro dentro do user_prompt, que sempre
+    # foi a premissa da REGRA 1.
+    #
+    # Para reativar seria preciso antes decidir como a REGRA 1 trata fonte externa, por
+    # exemplo allowlist de dominio. Enquanto isso nao existir, manter desligado.
+    _ = WEB_SEARCH_SUFFIX  # mantido para documentar o que foi desligado
 
     html: str | None = None
     model_used: str | None = None

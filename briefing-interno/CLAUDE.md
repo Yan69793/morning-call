@@ -131,3 +131,20 @@ Na mesma tarde o Yan decidiu: **o briefing nao vai mais para clientes, sempre e 
 ## Envio avulso para outro destinatario
 
 `enviar_briefing.py` aceita `--to email@x.com` para mandar uma copia para outro endereco sem mexer no `.env`. A validacao e a sentinela de idempotencia continuam valendo. Pedido do Yan em 13/08 para revisar o material em outra caixa.
+
+## Destinatario extra permanente no envio diario
+
+`TO_EMAIL_EXTRA` no `.env` (lista separada por virgula) recebe o briefing todo dia, junto com `TO_EMAIL`, sempre em BCC (nunca em `to`, para nao expor o endereco de ninguem). So se aplica ao envio padrao automatico das 07h00: uma chamada com `--to` (desvio pontual, ex.: Yan revisando noutra caixa) NAO puxa a lista extra, so manda para o endereco passado na hora. Adicionado em 17/08/2026 com `yaragarbo9@gmail.com`, a pedido do Yan. `_parse_extra_recipients` (testado em `TestExtraRecipients`, T07) descarta entrada vazia, entao virgula sobrando no fim da lista nao quebra o envio com endereco vazio.
+
+## Bug de renderizacao do e-mail, corrigido em 17/08/2026
+
+O briefing das 07h00 de 17/08 reprovou na 1a rodada (REGRA 2, formato de confianca, corrigido no mesmo commit que apertou a instrucao no prompt) e foi reenviado com sucesso as 07:54 e 08:06, mas as duas vezes o e-mail saiu com defeito: fonte cortada ("conforme reportado pela .") e o titulo de cada ponto duplicado como um item numerado fantasma, so com o titulo, sem corpo. O arquivo em disco (`outputs/briefing_20260817.html`) sempre esteve correto, o validador nunca pega esse tipo de erro porque ele roda sobre o HTML cru, nao sobre o e-mail estilizado que `build_styled_email` monta na hora do envio.
+
+Causa raiz, os dois no mesmo metodo `_BriefingContent.handle_data`:
+
+1. Todo texto dentro de `<a>...</a>` era descartado incondicionalmente, para sumir com citacao em `[url]`. O modelo (`google/gemma-3-27b-it:online`) citou a fonte como link natural na frase (`conforme reportado pela <a href=...>InfoMoney</a>`), entao o nome da fonte, que e parte da frase e nao so citacao, sumia junto.
+2. O roteamento olhava so `self._stack[-1]` (topo imediato da pilha). Quando `<b>` abre dentro de `<li>`, o topo vira `"b"`, e o texto caia no ramo de texto solto (bare) escrito para o caso do modelo nao usar `<li>` nenhum. O titulo sumia do item real e reaparecia depois como item novo, so com o titulo.
+
+Corrigido: `<a>` agora e transparente (o href nao sobrevive, o texto visivel sim, quem segue removendo citacao em `[url]` e a confianca e o `_strip_fonte_e_confianca`, inalterado) e o roteamento passa a checar se ha `<li>`/`<p>` aberto (`self._li_segments`/`self._p_segments` nao-None), nao o topo da pilha. Regressao coberta em `tests/test_pipeline_robustez.py::TestBriefingContentParser` (T06). Verificado localmente contra o HTML real de 17/08, sem reenviar nada: os dois itens saem com titulo, corpo e fonte intactos.
+
+Diagnostico completo em `diagnosticos/DIAGNOSTICO-2026-08-17.md`. Decisao do Yan no mesmo dia: manter a arquitetura de conteudo embutido no e-mail (nao migrar para o modelo do Fechamento de Mercado, e-mail curto com link para pagina hospedada), so corrigir o parser.

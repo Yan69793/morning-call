@@ -1,0 +1,70 @@
+{
+  "target": "briefing-interno (local pipeline, E:\\Diretorio\\Claude\\FREQUENTE\\Morning Call\\briefing-interno)",
+  "timestamp": "2026-08-17T09:30:00-03:00",
+  "trigger": "Yan reportou citacao de fonte vazia e itens duplicados no e-mail Panorama Diario recebido",
+  "http": [],
+  "ui": { "pageerrors": [], "interactions": [], "console": [] },
+  "pipeline": {
+    "run_0700": {
+      "coletar_noticias": "exit 0, 55 noticias",
+      "coletar_estado": "exit 0",
+      "gerar_briefing": "exit 0, 2807 chars, google/gemma-3-27b-it:online",
+      "validar_briefing": "exit 1, REPROVADO (REGRA 1: 2 URLs fora do pool; REGRA 2: formato de confianca invalido)",
+      "envio": "abortado"
+    },
+    "run_posterior": {
+      "validacao_arquivo": "logs/validacao_20260817.json: resultado=APROVADO, n_direcionais=1, n_confiancas=2, n_urls_no_html=2",
+      "envios_confirmados": [
+        { "log_line": "2026-08-17 07:54:32 ENVIAR_BRIEFING ENVIADO_OK outputs\\briefing_20260817.html" },
+        { "log_line": "2026-08-17 08:06:44 ENVIAR_BRIEFING ENVIADO_OK E:\\Diretorio\\Claude\\FREQUENTE\\Morning Call\\briefing-interno\\outputs\\briefing_20260817.html" }
+      ]
+    }
+  },
+  "diff_check": {
+    "arquivo_com_diff": "briefing-interno/scripts/gerar_briefing.py",
+    "conteudo_diff": "aperta a instrucao de formato 'confianca: X.X' no prompt, resolve a causa da REGRA 2 da 1a rodada",
+    "arquivo_do_bug": "briefing-interno/scripts/enviar_briefing.py",
+    "arquivo_do_bug_no_git_status": false,
+    "conclusao": "bug preexistente, nao introduzido pelo diff nao commitado"
+  },
+  "disk_vs_email": {
+    "disco_outputs_briefing_20260817_html": {
+      "item1": "titulo + corpo + (confianca: 0.7) + <a href=...>InfoMoney</a> intactos",
+      "item2": "titulo + corpo + (confianca: 0.6) + <a href=...>InfoMoney</a> intactos",
+      "total_itens": 2
+    },
+    "email_recebido_colado_pelo_yan": {
+      "item1": "corpo sem titulo, termina em 'conforme reportado pela .' (fonte ausente)",
+      "item2": "so titulo do item1 repetido, sem corpo (item fantasma)",
+      "item3": "corpo sem titulo, termina em 'conforme a .' (fonte ausente)",
+      "item4": "so titulo do item3 repetido, sem corpo (item fantasma)",
+      "total_itens_aparentes": 4
+    }
+  },
+  "findings": [
+    {
+      "id": "P0-001",
+      "severity": "P0",
+      "title": "Briefing com conteudo corrompido ja enviado por e-mail duas vezes (07:54:32 e 08:06:44)",
+      "evidence": "logs/briefing_20260817.log linhas 6-9, ENVIADO_OK duas vezes; nao ha como recolher e-mail ja enviado"
+    },
+    {
+      "id": "P1-001",
+      "severity": "P1",
+      "title": "_BriefingContent.handle_data descarta todo texto dentro de <a>, apagando nome da fonte quando citada como link inline",
+      "evidence": "enviar_briefing.py:162 'if self._a_depth > 0 or self._current is None: return'; produz 'conforme reportado pela .' e 'conforme a .'"
+    },
+    {
+      "id": "P1-002",
+      "severity": "P1",
+      "title": "handle_data roteia por self._stack[-1] (topo imediato), entao <b> dentro de <li> vaza pro branch de texto solto (bare) e o titulo vira item fantasma duplicado",
+      "evidence": "enviar_briefing.py:164-176 (dispatch por top-of-stack) + build_styled_email:348 (todo 'p' numerado vira linha numerada propria)"
+    },
+    {
+      "id": "P2-001",
+      "severity": "P2",
+      "title": "Segundo envio (08:06:44) so e possivel com --force (idempotencia bloquearia reenvio simples); destinatario/motivo nao confirmado no repo",
+      "evidence": "logs/briefing_20260817.log linha 8; grep por 'Silvia'/'sreneeg51' em briefing-interno/ sem resultado; TO_EMAIL padrao (.env) e szuchmacheryan@gmail.com"
+    }
+  ]
+}

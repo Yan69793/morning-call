@@ -101,5 +101,58 @@ class TestGdeltQueries(unittest.TestCase):
                 self.assertTrue(q.rstrip().endswith(")"), q)
 
 
+class TestBriefingContentParser(unittest.TestCase):
+    """T06 (17/08/2026): <b> dentro de <li> nao pode vazar pro paragrafo
+    "bare" e virar item fantasma, e o nome da fonte num <a> inline nao
+    pode ser descartado. Regressao de P1-001/P1-002 em
+    diagnosticos/DIAGNOSTICO-2026-08-17.md, causado pelo e-mail real de
+    17/08 (google/gemma-3-27b-it:online citou a fonte como link na
+    frase em vez de [url] entre colchetes)."""
+
+    def _parse(self, html_fragment):
+        html_doc = f"<html><body><h2>O QUE IMPORTA HOJE</h2><ol>{html_fragment}</ol></body></html>"
+        parser = enviar_briefing._BriefingContent()
+        parser.feed(html_doc)
+        parser.finish()
+        return parser.sections
+
+    def test_titulo_em_negrito_nao_vaza_para_item_fantasma(self):
+        li = "<li><b>Titulo do ponto.</b> Corpo da frase com o resto do texto.</li>"
+        _, itens = self._parse(li)[0]
+        # Um unico item, nao um item real mais um item fantasma so-titulo.
+        self.assertEqual(len(itens), 1)
+        tipo, dados = itens[0]
+        self.assertEqual(tipo, "li")
+        texto = "".join(t for t, _ in dados)
+        self.assertIn("Titulo do ponto.", texto)
+        self.assertIn("Corpo da frase", texto)
+
+    def test_nome_da_fonte_em_link_inline_sobrevive(self):
+        li = (
+            '<li><b>Titulo.</b> Corpo conforme reportado pela '
+            '<a href="https://exemplo.com/x">InfoMoney</a>.</li>'
+        )
+        _, itens = self._parse(li)[0]
+        texto = "".join(t for t, _ in itens[0][1])
+        self.assertIn("conforme reportado pela InfoMoney.", texto)
+        self.assertNotIn("pela .", texto)
+
+
+class TestExtraRecipients(unittest.TestCase):
+    """T07 (17/08/2026): TO_EMAIL_EXTRA vira lista de bcc, ignorando vazio
+    e espaco sobrando (ex.: virgula no fim quebraria o payload do Resend
+    com um endereco vazio)."""
+
+    def test_lista_simples(self):
+        self.assertEqual(
+            enviar_briefing._parse_extra_recipients("a@x.com, b@y.com"),
+            ["a@x.com", "b@y.com"],
+        )
+
+    def test_vazio_e_virgula_sobrando(self):
+        self.assertEqual(enviar_briefing._parse_extra_recipients(""), [])
+        self.assertEqual(enviar_briefing._parse_extra_recipients("a@x.com,,"), ["a@x.com"])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

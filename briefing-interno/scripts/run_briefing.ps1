@@ -114,27 +114,53 @@ if ($exitCode -ne 0) {
 # ============================================================
 # PASSO 3: gerar briefing
 # ============================================================
-Log "PASSO 3: gerar_briefing.py"
-$exitCode = Run-Python (Join-Path $ScriptRoot 'gerar_briefing.py')
-Log "gerar_briefing.py exit $exitCode"
-if ($exitCode -ne 0) {
-    Log "ERRO FATAL: gerar_briefing.py falhou (exit $exitCode). Abortando."
-    exit $exitCode
+# PASSOS 3 e 4 rodam juntos num laco de tentativas (18/08/2026).
+#
+# Motivo: o validador exige vocabulario literal (REGRA 2 formato da confianca,
+# REGRA 5 vocabulario direcional) e o modelo parafraseia livremente. Uma geracao
+# de tiro unico transforma essa variacao de redacao em briefing nao entregue.
+# Medido em 18/08 com 4 geracoes seguidas: 3 aprovadas, 1 reprovada na REGRA 5.
+# Nos logs de 13, 14 e 17/08 o Yan fazia exatamente este retry a mao, corrigindo
+# e reenviando depois do horario. O laco automatiza o que ja era o procedimento.
+#
+# O portao continua fechado: se as tentativas acabarem sem aprovacao, nada e
+# enviado e o exit code do validador e propagado igual a antes.
+$briefingPath = Join-Path $ProjectRoot "outputs" "briefing_${DateTag}.html"
+$maxTentativas = 3
+$aprovado = $false
+$exitCode = 1
+
+for ($tentativa = 1; $tentativa -le $maxTentativas; $tentativa++) {
+    Log "PASSO 3: gerar_briefing.py (tentativa $tentativa de $maxTentativas)"
+    $exitCode = Run-Python (Join-Path $ScriptRoot 'gerar_briefing.py')
+    Log "gerar_briefing.py exit $exitCode"
+    if ($exitCode -ne 0) {
+        Log "ERRO FATAL: gerar_briefing.py falhou (exit $exitCode). Abortando."
+        exit $exitCode
+    }
+
+    if (-not (Test-Path $briefingPath)) {
+        Log "ERRO FATAL: briefing nao encontrado: $briefingPath"
+        exit 6
+    }
+
+    Log "PASSO 4: validar_briefing.py (tentativa $tentativa de $maxTentativas)"
+    $exitCode = Run-Python (Join-Path $ScriptRoot 'validar_briefing.py') @($briefingPath)
+    Log "validar_briefing.py exit $exitCode"
+
+    if ($exitCode -eq 0) {
+        $aprovado = $true
+        Log "APROVADO na tentativa $tentativa de $maxTentativas."
+        break
+    }
+
+    if ($tentativa -lt $maxTentativas) {
+        Log "REPROVADO na tentativa $tentativa. Regerando."
+    }
 }
 
-# ============================================================
-# PASSO 4: validar briefing
-# ============================================================
-Log "PASSO 4: validar_briefing.py"
-$briefingPath = Join-Path $ProjectRoot "outputs" "briefing_${DateTag}.html"
-if (-not (Test-Path $briefingPath)) {
-    Log "ERRO FATAL: briefing nao encontrado: $briefingPath"
-    exit 6
-}
-$exitCode = Run-Python (Join-Path $ScriptRoot 'validar_briefing.py') @($briefingPath)
-Log "validar_briefing.py exit $exitCode"
-if ($exitCode -ne 0) {
-    Log "REPROVADO: briefing nao passou no portao. Envio abortado."
+if (-not $aprovado) {
+    Log "REPROVADO: briefing nao passou no portao em $maxTentativas tentativas. Envio abortado."
     exit $exitCode
 }
 
@@ -142,10 +168,26 @@ if ($exitCode -ne 0) {
 # PASSO 5: enviar briefing
 # ============================================================
 Log "PASSO 5: enviar_briefing.py"
+
+# enviar_briefing.py devolve exit 0 tanto quando envia agora quanto quando pula
+# por causa da sentinela de idempotencia. Escrever "ENVIADO OK" nos dois casos
+# produzia log que afirma envio numa execucao que nao enviou nada. O projeto
+# irmao (relatorio-diario) ja teve esse mesmo falso "ENVIADO OK" e corrigiu.
+# A sentinela e lida ANTES da chamada para separar os dois casos.
+$sentinelPath = Join-Path $ProjectRoot "logs" "sent_${DateTag}.flag"
+$jaEnviadoAntes = Test-Path $sentinelPath
+
 $exitCode = Run-Python (Join-Path $ScriptRoot 'enviar_briefing.py') @($briefingPath)
 Log "enviar_briefing.py exit $exitCode"
 if ($exitCode -eq 0) {
-    Log "ENVIADO OK: briefing matinal enviado com sucesso."
+    if ($jaEnviadoAntes) {
+        # Nao usar a string ENVIADO OK aqui: o watchdog procura por ela como
+        # prova de envio, e nesta execucao nada foi enviado. A sentinela ja
+        # cobre o caso, o watchdog a checa primeiro.
+        Log "JA ENVIADO: briefing $DateTag tinha sentinela previa. Nada reenviado nesta execucao."
+    } else {
+        Log "ENVIADO OK: briefing matinal enviado com sucesso."
+    }
 } else {
     Log "ERRO: envio falhou (exit $exitCode)."
 }

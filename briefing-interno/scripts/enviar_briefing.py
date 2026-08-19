@@ -100,8 +100,11 @@ def _idempotency_check(data_tag: str, force: bool = False) -> bool:
 # ============================================================
 
 class _BriefingContent(HTMLParser):
-    """Extrai h1/h2/p/li do briefing gerado, preservando negrito e
-    descartando o conteudo de links (fontes), que nao vai ao e-mail.
+    """Extrai h1/h2/p/li do briefing gerado, preservando negrito. Links
+    (<a>) sao transparentes: o href nao sobrevive, mas o texto visivel
+    (nome da fonte, parte da frase, ex. "conforme reportado pela
+    InfoMoney") fica. Quem remove citacao solta em [url] e a
+    confianca e o _strip_fonte_e_confianca, depois do parse.
 
     O modelo as vezes escreve o conteudo como texto solto, sem <p> nem
     <li>. Esse texto vira paragrafo "bare" da secao, para nada sumir."""
@@ -111,7 +114,6 @@ class _BriefingContent(HTMLParser):
         self.sections = []  # [(titulo, [(tipo, dados)])]
         self._current = None
         self._stack = []
-        self._a_depth = 0
         self._p_segments = None
         self._li_segments = None
         self._bare_segments = None
@@ -141,14 +143,10 @@ class _BriefingContent(HTMLParser):
             self._stack.append("li")
         elif tag == "b" and self._current is not None:
             self._stack.append("b")
-        elif tag == "a":
-            self._a_depth += 1
 
     def handle_endtag(self, tag):
         if self._stack and self._stack[-1] == tag:
             self._stack.pop()
-        if tag == "a" and self._a_depth > 0:
-            self._a_depth -= 1
         if tag == "p" and self._p_segments is not None:
             self._current[1].append(("p", self._p_segments))
             self._p_segments = None
@@ -159,18 +157,22 @@ class _BriefingContent(HTMLParser):
     def handle_data(self, data):
         if not data.strip():
             return
-        if self._a_depth > 0 or self._current is None:
+        if self._current is None:
             return
         top = self._stack[-1] if self._stack else None
         if top in ("h1", "h2"):
             self._current[0] += data
             return
-        if top == "p" and self._p_segments is not None:
-            self._append(self._p_segments, data)
-        elif top == "li" and self._li_segments is not None:
+        # Roteia pelo container aberto (li/p), nao pelo topo imediato da
+        # pilha: <b> (ou <a>, que nao entra na pilha) dentro de <li> nao
+        # pode desviar o texto do item para o ramo "bare" abaixo.
+        if self._li_segments is not None:
             self._append(self._li_segments, data)
-        elif top == "b" or top is None:
-            # Texto solto na secao (bare). O negrito marca o titulo do ponto.
+        elif self._p_segments is not None:
+            self._append(self._p_segments, data)
+        else:
+            # Texto solto na secao (bare), fora de <li>/<p>. O negrito
+            # marca o titulo do ponto.
             if self._bare_segments is None:
                 self._bare_segments = []
             self._append(self._bare_segments, data)
@@ -467,7 +469,7 @@ def _send_resend(
 
     payload = {
         "from": from_email,
-        "to": [from_email if bcc_list else to_email],
+        "to": [to_email],
         "subject": f"Briefing Matinal — {data_fmt}",
         "html": styled,
         "text": plain,
@@ -540,6 +542,12 @@ def _log(status: str, detail: str) -> None:
             f.write(f"{timestamp} ENVIADO OK {detail}\n")
 
 
+def _parse_extra_recipients(raw: str) -> list[str]:
+    """Quebra TO_EMAIL_EXTRA (lista separada por virgula) em enderecos,
+    descartando vazio e espaco sobrando (ex.: virgula no fim)."""
+    return [a.strip() for a in raw.split(",") if a.strip()]
+
+
 def main(argv: list[str]) -> int:
     if len(argv) < 2:
         print("Uso: python scripts/enviar_briefing.py outputs/briefing_YYYYMMDD.html [--force]", file=sys.stderr)
@@ -573,7 +581,8 @@ def main(argv: list[str]) -> int:
     to_email = env.get("TO_EMAIL", "").strip()
 
     # Envio avulso para outro destinatario: --to email@x.com
-    if "--to" in argv:
+    to_overridden = "--to" in argv
+    if to_overridden:
         idx = argv.index("--to")
         if idx + 1 < len(argv):
             to_email = argv[idx + 1].strip()
@@ -620,9 +629,17 @@ def main(argv: list[str]) -> int:
         _log("CLIENTES_ENVIO_FALHOU", str(html_path))
         return 11
 
-    print(f">>> Enviando briefing {data_tag} para {to_email}...")
+    # Destinatarios extra permanentes (TO_EMAIL_EXTRA no .env), sempre em
+    # copia oculta. So no envio padrao: --to e desvio pontual (ex.: revisar
+    # noutra caixa) e nao deve puxar a lista extra junto.
+    extra_bcc: list[str] = []
+    if not to_overridden:
+        extra_bcc = _parse_extra_recipients(env.get("TO_EMAIL_EXTRA", ""))
 
-    if _send_resend(html_path, api_key, from_email, to_email, data_tag):
+    extra_msg = f" (+{len(extra_bcc)} em copia oculta)" if extra_bcc else ""
+    print(f">>> Enviando briefing {data_tag} para {to_email}{extra_msg}...")
+
+    if _send_resend(html_path, api_key, from_email, to_email, data_tag, bcc_list=extra_bcc or None):
         _log("ENVIADO_OK", str(html_path))
         # Gravar sentinela
         sentinel = LOG_DIR / f"sent_{data_tag}.flag"
