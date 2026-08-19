@@ -1,6 +1,6 @@
 # Estado do projeto — Morning Call
 
-Última atualização: 2026-08-17 (agente: Claude Code)
+Última atualização: 2026-08-18 (agente: Claude Code)
 
 Leia este arquivo antes de começar qualquer trabalho, seja qual for o agente.
 Atualize a data e os itens abertos ao fechar uma sessão que mudou o estado.
@@ -21,7 +21,7 @@ que roda fora do workspace npm.
 ## Estado em 2026-08-17
 
 Pronto, conforme o CLAUDE.md: monorepo npm workspaces estruturado
-(`apps/morning-call`, `apps/radar-quant`, `packages/analytics`), briefing-interno rodando
+(`apps/morning-call`, `radar-quant-brasil`, `packages/analytics`), briefing-interno rodando
 diariamente às 07h00 via Task Scheduler, portão de verificação definido para o monorepo e
 para o briefing, e deploy sempre como ação humana explícita. Em produção: deploys de 14/08
 dos dois Workers com CORS fail-closed e TRIGGER_SECRET criado, e P-05 em produção desde
@@ -58,7 +58,7 @@ python briefing-interno/scripts/validar_briefing.py briefing-interno/outputs/bri
   `PLANO_ESTRATEGICO.md` (portões), `PLANO_EXECUCAO.md` (T1–T8) e
   `MORNING_CALL_OTIMIZADO.md` (contrato editorial do relatório)
 - `PENDENCIAS.md` — registro de pendências e perguntas abertas da auditoria
-- `apps/morning-call`, `apps/radar-quant`, `packages/analytics` — workspaces npm
+- `apps/morning-call`, `radar-quant-brasil`, `packages/analytics` — workspaces npm
 - `briefing-interno/` — pipeline Python do briefing pessoal (CLAUDE.md próprio)
 
 ## Itens abertos
@@ -66,3 +66,20 @@ python briefing-interno/scripts/validar_briefing.py briefing-interno/outputs/bri
 - Sem pendências abertas registradas no CLAUDE.md.
 - Pendências e perguntas da auditoria em aberto (P-10 a P-15; RQ-34 corrigido mas não
   commitado na sessão de 17/08): ver `PENDENCIAS.md`.
+
+## Estado do briefing-interno em 2026-08-18
+
+Correção do `:online` concluída e commitada em `main` (075a806, "fix(briefing-interno):
+desativa :online do OpenRouter e fecha entrega de 4 dias"). O sufixo de web search era
+incompatível por construção com a REGRA 1 do validador, que exige toda URL citada no pool
+RSS coletado localmente: 13, 14, 17 e 18/08 reprovaram no portão e ficaram sem entrega às
+07h00. O validador ficou intocado, fail-closed preservado, e o `run_briefing.ps1` agora
+tenta geração+validação em laço de 3 tentativas (o retry que o Yan já fazia à mão), sem
+afrouxar regra nenhuma: sem aprovação, nada é enviado.
+
+Prova do dia 18/08: rodada das 16:24 com `:online` reprovada na REGRA 1 (2 URLs fora do
+pool), rodadas das 21:07, 21:10 e 21:39 sem o sufixo aprovadas de primeira, todas as URLs
+no pool. Envio real às 21:06:49 confirmado pelo Resend (sentinela `sent_20260818.flag`).
+As tasks `Szuchmacher-BriefingMatinal` (07h00) e `Szuchmacher-BriefingWatchdog` (07h20)
+seguem Ready, e o `.env` usa `OPENROUTER_MODEL=google/gemma-3-27b-it` sem sufixo. Detalhe
+no `briefing-interno/CLAUDE.md` e nos logs de `briefing-interno/logs/`.
