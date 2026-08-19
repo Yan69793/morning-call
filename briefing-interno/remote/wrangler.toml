@@ -1,0 +1,48 @@
+# sz-briefing-remote — execucao remota do Briefing Matinal interno.
+#
+# Local (Task Scheduler 07h00 BRT) segue como primario; este worker e o
+# fallback que roda com o PC desligado. O claim atomico no Durable Object
+# garante exatamente uma entrega por dia, Local ou Remote.
+#
+# Crons em UTC. BRT = UTC-3 fixo (sem horario de verao desde 2019).
+#   5 10 * * 1-5  -> 07:05 BRT  run (fallback apos a janela local)
+#   35 10 * * 1-5 -> 07:35 BRT  retry unico de falha remota
+#   40 10 * * 1-5 -> 07:40 BRT  watchdog (alerta + recover opcional)
+# Feriado B3 e checado em codigo (src/holidays.js), como no pipeline local.
+#
+# Rollback: `wrangler deployments rollback` ou `wrangler delete`.
+# O Local nunca depende deste worker: sem ele, o pipeline local segue como hoje.
+# Pin: compatibility_date fixo, nunca mexer sem decisao explicita.
+
+name = "sz-briefing-remote"
+main = "src/index.js"
+compatibility_date = "2026-08-01"
+workers_dev = true
+
+[vars]
+ENVIRONMENT = "production"
+FROM_EMAIL = "yan@szuchmacher.com.br"
+OPENROUTER_MODEL = "google/gemma-3-27b-it"
+OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+MORNING_CALL_URL = "https://morning-call.prospects-intel.workers.dev/api/report/latest"
+RADAR_QUANT_URL = "https://radar-quant-brasil.prospects-intel.workers.dev/api/radar/latest"
+VIXRADAR_URL = "https://radar-credito-api.prospects-intel.workers.dev"
+RECOVER_ON_WATCHDOG = "true"
+
+# Secrets (wrangler secret put, nunca no repo):
+#   OPENROUTER_API_KEY, RESEND_API_KEY, TO_EMAIL, TO_EMAIL_EXTRA, ALERT_EMAIL,
+#   RUN_TRIGGER_KEY (POST /run), LOCAL_CLAIM_KEY (claim/complete/state)
+
+[[kv_namespaces]]
+binding = "STATE_KV"
+id = "KV_PLACEHOLDER"
+
+[durable_objects]
+bindings = [{ name = "PIPELINE_STATE", class_name = "PipelineStateDO" }]
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["PipelineStateDO"]
+
+[triggers]
+crons = ["5 10 * * 1-5", "35 10 * * 1-5", "40 10 * * 1-5"]
