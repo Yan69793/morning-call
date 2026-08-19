@@ -1,8 +1,8 @@
 # registrar-tarefa.ps1: registra as tasks do Briefing Matinal no Task Scheduler.
 #
 # Duas tasks:
-#   Szuchmacher-BriefingMatinal — 07h00, dias uteis, executa launcher_briefing.ps1
-#   Szuchmacher-BriefingWatchdog — 07h20, dias uteis, executa watchdog_briefing.ps1
+#   Szuchmacher-BriefingMatinal -07h00, dias uteis, executa launcher_briefing.ps1
+#   Szuchmacher-BriefingWatchdog -07h20, dias uteis, executa watchdog_briefing.ps1
 #
 # Uso: pwsh -File registrar-tarefa.ps1
 # O registro so acontece com confirmacao explicita.
@@ -58,7 +58,7 @@ try {
         -Trigger $trigger `
         -Settings $settings `
         -Principal $principal `
-        -Description 'Briefing Matinal — 07h00 dias uteis. Pipeline: coleta noticias -> estado -> gera -> valida -> envia.' `
+        -Description 'Briefing Matinal -07h00 dias uteis. Pipeline: coleta noticias -> estado -> gera -> valida -> envia.' `
         -Force
     Write-Host "OK: task $taskName registrada (07h00, diario)"
 } catch {
@@ -83,7 +83,7 @@ try {
         -Trigger $wdTrigger `
         -Settings $settings `
         -Principal $principal `
-        -Description 'Briefing Matinal Watchdog — 07h20. Alerta se o briefing nao saiu.' `
+        -Description 'Briefing Matinal Watchdog -07h20. Alerta se o briefing nao saiu.' `
         -Force
     Write-Host "OK: task $watchdogName registrada (07h20, diario)"
 } catch {

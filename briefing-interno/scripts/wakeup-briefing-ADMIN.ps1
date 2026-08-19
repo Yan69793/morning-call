@@ -1,4 +1,4 @@
-# wakeup-briefing-ADMIN.ps1 — RODAR ELEVADO, uma vez so.
+# wakeup-briefing-ADMIN.ps1 -RODAR ELEVADO, uma vez so.
 # Liga WakeToRun na task Szuchmacher-BriefingMatinal: a maquina acorda
 # sozinha para o envio das 07h00, mesmo suspensa. Mantem todo o resto
 # das configuracoes da task. ASCII puro. Log em logs/wakeup-briefing-20260813.log.

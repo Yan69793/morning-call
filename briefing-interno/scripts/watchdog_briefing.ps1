@@ -69,7 +69,7 @@ if (Test-Path $claimScript) {
     }
 }
 
-# Nada encontrado — alertar
+# Nada encontrado -alertar
 $alertLine = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') WATCHDOG: ALERTA briefing $DateTag NAO foi enviado"
 Write-Host $alertLine
 
