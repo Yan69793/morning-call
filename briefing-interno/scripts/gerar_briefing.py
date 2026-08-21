@@ -319,6 +319,12 @@ def _call_openrouter(
 def main(argv: list[str]) -> int:
     do_send = "--send" in argv
     dry_run = "--dry-run" in argv
+    tentativa = 1
+    if "--tentativa" in argv:
+        try:
+            tentativa = int(argv[argv.index("--tentativa") + 1])
+        except (ValueError, IndexError):
+            tentativa = 1
     env = _load_env()
 
     api_key = env.get("OPENROUTER_API_KEY", "").strip()
@@ -359,6 +365,13 @@ def main(argv: list[str]) -> int:
     models_to_try: list[str] = [primary_model]
     if fallback_model:
         models_to_try.append(fallback_model)
+
+    # MODELVAR1 (2026-08-21): a partir da tentativa 2, inverter a ordem da
+    # cadeia. As 3 tentativas de 20/08 foram o mesmo modelo com o mesmo prompt
+    # e o portao reprovou as 3 (falha correlacionada). Inverter nao afrouxa o
+    # portao, so explora primeiro o modelo que ainda nao jogou.
+    if tentativa >= 2 and fallback_model:
+        models_to_try = [fallback_model, primary_model]
 
     # WEB_SEARCH_SUFFIX (:online) desativado em 18/08/2026. Nao reativar sem mudar a REGRA 1.
     #

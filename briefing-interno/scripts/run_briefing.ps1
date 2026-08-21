@@ -162,6 +162,11 @@ if ($claimStatus -eq 'inacessivel') {
 #
 # O portao continua fechado: se as tentativas acabarem sem aprovacao, nada e
 # enviado e o exit code do validador e propagado igual a antes.
+#
+# MODELVAR1 (2026-08-21): a partir da tentativa 2 a cadeia de modelos inverte
+# (fallback primeiro). As 3 tentativas de 20/08 foram o mesmo gemma-3-27b com
+# o mesmo prompt, reprovadas as 3 pelo portao, e trocar so a amostragem nao
+# quebra essa correlacao. A config de qual modelo e fallback vive no .env.
 $briefingPath = Join-Path $ProjectRoot "outputs" "briefing_${DateTag}.html"
 $maxTentativas = 3
 $aprovado = $false
@@ -169,7 +174,10 @@ $exitCode = 1
 
 for ($tentativa = 1; $tentativa -le $maxTentativas; $tentativa++) {
     Log "PASSO 3: gerar_briefing.py (tentativa $tentativa de $maxTentativas)"
-    $exitCode = Run-Python (Join-Path $ScriptRoot 'gerar_briefing.py')
+    if ($tentativa -ge 2) {
+        Log "PASSO 3: tentativa $tentativa com a cadeia invertida (fallback primeiro)"
+    }
+    $exitCode = Run-Python (Join-Path $ScriptRoot 'gerar_briefing.py') @('--tentativa', "$tentativa")
     Log "gerar_briefing.py exit $exitCode"
     if ($exitCode -ne 0) {
         Log "ERRO FATAL: gerar_briefing.py falhou (exit $exitCode). Abortando."
