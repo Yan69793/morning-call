@@ -47,6 +47,17 @@ Local continua sendo o caminho principal e o unico com `--clientes`; o remote
 so entra se o local nao reivindicar o dia (`scripts/claim_remote.py`, best
 effort, nunca bloqueia o local se o Worker estiver fora do ar).
 
+## MODELVAR1 — cadeia de modelos varia por tentativa (21/08/2026)
+
+O laco de 3 tentativas repetia o mesmo modelo com o mesmo prompt e o portao
+reprovava as 3 (20/08: 3x gemma-3-27b, falha correlacionada). Desde 21/08 o
+`run_briefing.ps1` passa `--tentativa N` ao `gerar_briefing.py` e, a partir da
+tentativa 2, a cadeia inverte: `OPENROUTER_FALLBACK_MODEL` primeiro, primario
+depois. Hoje o fallback e `meta-llama/llama-3.3-70b-instruct` (decisao do Yan,
+gravada no `.env`). O portao continua fechado, nada sai sem APROVADO. Teste
+seco de 21/08: tentativa 2 gerou com o llama e o validador aprovou na primeira
+jogada.
+
 ## Portao de verificacao
 
 Antes de declarar qualquer tarefa concluida, execute:
