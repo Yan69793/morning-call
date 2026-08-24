@@ -78,3 +78,27 @@ de status" do `PENDENCIAS.md`.
    `gravar_visao.py`. O comparador contra o realizado só faz sentido com série, alvo de 30
    dias úteis em `briefing-interno/visao/`. Construir antes é gerador de relatório sem nada
    para relatar.
+
+3. **Lint do monorepo reprova, e o motivo é pior que estilo.** `npm run lint` sai com
+   19 erros e 8 avisos. Estado anterior a 24/08, provado: nenhum commit desta data tocou
+   os arquivos que falham, e o `eslint.config.js` só trocou `apps/radar-quant/` por
+   `radar-quant-brasil/` no ignore.
+
+   Os 19 erros são todos `Parsing error: was not found by the project service` em
+   `briefing-interno/remote/`, 12 arquivos em `src/` e 7 testes `.mjs`. O diretório não
+   tem `tsconfig` próprio e não está no ignore do ESLint, então a ferramenta não consegue
+   abrir nenhum deles. **Não é que esses arquivos reprovaram, é que nunca foram
+   verificados.** E são o Worker de reserva que envia o briefing quando a máquina local
+   está desligada, ou seja, código de caminho de envio sem análise estática nenhuma desde
+   que nasceu em 19/08.
+
+   Ignorar é o conserto errado. `remote/` é fonte, não bundle gerado, diferente das
+   entradas que já estão no ignore (`dist/`, `dist-assets/`, `.wrangler/`, worktrees).
+   O caminho é dar um `tsconfig` ao `remote/` ou incluí-lo num existente, e então ver o
+   que o lint tem a dizer sobre 19 arquivos que ninguém nunca checou.
+
+   Os 8 avisos são `no-console` em `apps/morning-call/src/data/agenda/`, cosméticos ao
+   lado disso.
+
+   Enquanto não fechar, o portão de aceite do projeto (`npm test && npm run typecheck &&
+   npm run lint`) não passa limpo. Test e typecheck estão verdes, 317 testes em 24/08.
