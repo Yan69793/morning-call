@@ -324,8 +324,101 @@ def _bullet_row(segments):
     )
 
 
-def build_styled_email(html_content: str, data_fmt: str) -> str:
-    """Monta o e-mail do briefing com a paleta do relatorio diario."""
+# Linha que e so um negrito, ex.: "<b>RESUMO</b>". Vira cabecalho de secao.
+_LINHA_SO_BOLD_RE = re.compile(r"^\s*<b>\s*(.+?)\s*</b>\s*$", re.IGNORECASE)
+# Linha de agenda em hifen, ex.: "- 03:00 (UK): Reino Unido ...". Vira item.
+_LINHA_TRACO_RE = re.compile(r"^\s*-\s+(.*\S)\s*$")
+# Ponto ja numerado pelo modelo, ex.: "1. <b>Titulo</b> corpo...". Vira item
+# sem o numero: quem numera no e-mail e _numbered_row. Deixar o numero no
+# texto produz "1. 1." e um item fantasma so com o numero solto.
+_LINHA_NUMERO_RE = re.compile(r"^\s*\d+[.)]\s+(.*\S)\s*$")
+
+
+def _normalizar_estrutura(html_content: str) -> str:
+    """Converte briefing sem marcacao estrutural para a forma canonica.
+
+    O modelo nem sempre usa <h1>/<h2>/<li>. Em 21/08/2026 ele marcou os
+    titulos de secao apenas com <b> e a agenda com hifen: nenhum <h1> no
+    documento inteiro. Como _BriefingContent so abre secao ao ver <h1>/<h2>,
+    e handle_data descarta todo texto enquanto nao houver secao aberta, o
+    e-mail daquele dia saiu com hero e rodape e zero conteudo, embora o
+    arquivo em disco estivesse correto e aprovado no portao.
+
+    A correcao normaliza a ENTRADA em vez de mudar o parser. Mexer no
+    roteamento teria efeito em cascata na numeracao dos pontos e na remocao
+    de fonte de 19/08, que procura literalmente <h1>O QUE IMPORTA HOJE</h1>.
+    Normalizando aqui, o documento chega ao resto do fluxo na mesma forma
+    dos dias que sempre funcionaram, sem tocar em codigo ja exercitado.
+
+    Idempotente: documento que ja traz cabecalho e item sai inalterado.
+    """
+    tem_cabecalho = bool(re.search(r"<h[12][\s>]", html_content, re.IGNORECASE))
+    tem_item = bool(re.search(r"<li[\s>]", html_content, re.IGNORECASE))
+    if tem_cabecalho and tem_item:
+        return html_content
+
+    saida = []
+    for linha in html_content.splitlines():
+        if not tem_cabecalho:
+            m = _LINHA_SO_BOLD_RE.match(linha)
+            if m:
+                saida.append(f"<h1>{m.group(1)}</h1>")
+                continue
+        if not tem_item:
+            m = _LINHA_TRACO_RE.match(linha) or _LINHA_NUMERO_RE.match(linha)
+            if m:
+                saida.append(f"<li>{m.group(1)}</li>")
+                continue
+        saida.append(linha)
+    return "\n".join(saida)
+
+
+def _texto_visivel(html_str: str) -> str:
+    """Texto que o leitor ve, sem markup. Usado na trava anti-e-mail-vazio."""
+    t = re.sub(r"(?is)<(script|style)[^>]*>.*?</\1>", " ", html_str)
+    t = re.sub(r"<[^>]+>", " ", t)
+    t = html.unescape(t)
+    return re.sub(r"\s+", " ", t).strip()
+
+
+def _corpo_suficiente(html_content: str) -> tuple[bool, str]:
+    """Confere se o corpo montado carrega mesmo o conteudo do briefing.
+
+    Rede de seguranca independente do parser: o validador roda sobre o HTML
+    cru e por desenho nao enxerga esta etapa, entao uma falha de render passa
+    por todos os portoes e chega ao destinatario. Fail-closed, o envio para.
+
+    Mede o corpo direto, sem descontar o tamanho do hero e do rodape: essa
+    aritmetica dependia de constante estimada e o texto fixo varia com a data.
+    """
+    bruto = _texto_visivel(html_content)
+    corpo = _texto_visivel(_montar_corpo(html_content))
+
+    if not bruto:
+        return False, "briefing cru sem texto visivel"
+    if not corpo:
+        return False, (
+            f"e-mail montado sem corpo, so hero e rodape; "
+            f"briefing cru tem {len(bruto)} chars de texto"
+        )
+    proporcao = len(corpo) / len(bruto)
+    if proporcao < 0.5:
+        return False, (
+            f"e-mail montado perdeu conteudo: corpo {len(corpo)} chars contra "
+            f"{len(bruto)} do briefing cru ({proporcao:.0%})"
+        )
+    return True, f"corpo {len(corpo)} chars, {proporcao:.0%} do briefing cru"
+
+
+def _montar_corpo(html_content: str) -> str:
+    """Monta so as linhas de conteudo do e-mail, sem hero nem rodape.
+
+    Separado de build_styled_email para que a trava anti-e-mail-vazio possa
+    medir o corpo real em vez de estimar o tamanho do texto fixo.
+    """
+    # Briefing sem <h1>/<li> (21/08/2026) rendia e-mail vazio. Normalizar
+    # antes de qualquer coisa: a remocao de fonte abaixo depende do <h1>.
+    html_content = _normalizar_estrutura(html_content)
     # Ordem do Yan em 19/08/2026, em definitivo ate nova ordem: o e-mail sai
     # SEM as fontes dos pontos do O QUE IMPORTA HOJE. Remove a ancora
     # <a>...</a> inteira (rotulo do veiculo) DENTRO dessa secao, antes do
@@ -374,7 +467,12 @@ def build_styled_email(html_content: str, data_fmt: str) -> str:
                 body_rows.append(_numbered_row(n, dados))
             elif tipo == "li":
                 body_rows.append(_bullet_row(dados))
-    corpo = "\n".join(body_rows)
+    return "\n".join(body_rows)
+
+
+def build_styled_email(html_content: str, data_fmt: str) -> str:
+    """Monta o e-mail do briefing com a paleta do relatorio diario."""
+    corpo = _montar_corpo(html_content)
 
     return f"""<!DOCTYPE html>
 <html lang="pt-BR" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
@@ -480,6 +578,16 @@ def _send_resend(
     # com versao texto puro de fallback. O arquivo em disco nao muda.
     styled = build_styled_email(html_content, data_fmt)
     plain = build_plain_text(html_content)
+
+    # Trava anti-e-mail-vazio. O portao valida o HTML cru e nao ve o render,
+    # entao sem esta checagem um briefing aprovado vira e-mail so com logo,
+    # como aconteceu em 21/08/2026. Nada sai se o corpo nao chegou.
+    ok_render, motivo_render = _corpo_suficiente(html_content)
+    if not ok_render:
+        print(f"ERRO RENDER: {motivo_render}", file=sys.stderr)
+        _log("RENDER_INSUFICIENTE", motivo_render)
+        return False
+    print(f"render OK: {motivo_render}")
 
     payload = {
         "from": from_email,

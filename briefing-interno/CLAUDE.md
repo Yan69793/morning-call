@@ -165,6 +165,121 @@ O Yan mandou explicitamente soltar o briefing de 19/08 para a lista de clientes 
 
 A decisao de 14/08 segue como padrao: envio a clientes continua exigindo ordem direta do Yan, flag de aprovacao do dia e a lista viva do `.env` do Fechamento. Nada mudou no fluxo das 07h00.
 
+## E-mail vazio quando o modelo nao usa cabecalho, corrigido em 24/08/2026
+
+Achado num teste seco da madrugada de 24/08, antes do envio a clientes.
+
+Nenhum e-mail vazio chegou a ser enviado. A primeira leitura desta sessao
+dizia que o e-mail de 21/08 tinha saido vazio, e estava ERRADA: o Yan conferiu
+a caixa e o e-mail daquele dia chegou normal. O que enganou foi o artefato em
+disco. `outputs/briefing_20260821.html` tem mtime 16:17:19, nove horas depois
+do envio das 07:01:47, e 1886 chars contra os 3951 registrados no log. O
+arquivo foi sobrescrito na mesma tarde pelo teste seco do MODELVAR1. O envio
+real de 21/08 foi gerado por `google/gemma-3-27b-it` e renderizou bem.
+
+Licao de metodo: artefato em disco nao e prova do que foi entregue quando o
+pipeline reescreve o mesmo caminho. Conferir mtime contra a hora do envio no
+log antes de tratar um output como evidencia do que o destinatario recebeu.
+
+O defeito, porem, e real e esta armado. Quem produz o formato que quebra e o
+`meta-llama/llama-3.3-70b-instruct`, e o MODELVAR1 (21/08) colocou justamente
+esse modelo como primeiro da cadeia a partir da tentativa 2. Em 21/08 o portao
+aprovou na tentativa 1, 22 e 23 caiu fim de semana, entao a combinacao nunca
+chegou a um envio de verdade. Bastava um dia em que a tentativa 1 reprovasse.
+
+Causa raiz, terceira aparicao do mesmo ponto cego (13/08 REGRA 1, 17/08
+parser, agora este): `_BriefingContent.handle_data` descarta todo texto
+enquanto `self._current` for None, e `_current` so nasce ao encontrar
+`<h1>`/`<h2>`. A saida do llama marca as secoes so com `<b>RESUMO</b>` e a
+agenda com hifen, sem um unico `<h1>` no documento. Nenhuma secao aberta,
+todo `handle_data` retorna cedo, corpo vazio. Contagem dos artefatos em disco
+(o de 21/08 e a saida do llama, os demais sao a saida do gemma no envio real):
+
+```
+briefing_20260817.html  h1/h2=4   p=1   li=3   b=2   gemma   render OK
+briefing_20260818.html  h1/h2=3   p=6   li=2   b=5   gemma   render OK
+briefing_20260819.html  h1/h2=3   p=6   li=3   b=5   gemma   render OK
+briefing_20260820.html  h1/h2=3   p=6   li=3   b=5   gemma   render OK
+briefing_20260821.html  h1/h2=0   p=0   li=0   b=6   llama   CORPO VAZIO
+```
+
+O validador nao pega e nunca vai pegar: por desenho ele roda sobre o HTML cru
+e nao enxerga `build_styled_email`. Briefing perfeito aprovado no portao
+viraria e-mail vazio sem nenhum alarme.
+
+Correcao em duas camadas.
+
+1. `_normalizar_estrutura` converte a entrada para a forma canonica antes de
+   qualquer parse: linha que e so `<b>X</b>` vira `<h1>X</h1>`, linha em hifen
+   e linha ja numerada pelo modelo viram `<li>`. So age quando falta a
+   marcacao, documento canonico sai inalterado. Normalizar a ENTRADA em vez de
+   mudar o parser foi decisao deliberada: mexer no roteamento teria efeito em
+   cascata na numeracao dos pontos e na remocao de fonte de 19/08, que procura
+   literalmente `<h1>O QUE IMPORTA HOJE</h1>` e por isso tambem estava
+   falhando em silencio no formato de 21/08 (as fontes vazariam para o
+   e-mail). O numero do modelo e removido do texto porque quem numera e
+   `_numbered_row`, mante-lo produzia "1. 1." e um item fantasma so com o
+   numero solto.
+
+2. `_corpo_suficiente` e trava independente do parser, chamada em
+   `_send_resend` antes do POST. Mede o texto visivel do corpo montado contra
+   o do briefing cru e barra o envio se o corpo vier vazio ou abaixo de 50%.
+   Fail-closed: qualquer quebra futura de render, de outra causa, para o envio
+   em vez de entregar casca vazia. Mede o corpo direto via `_montar_corpo`,
+   sem descontar constante estimada de hero e rodape, porque esse texto fixo
+   varia de tamanho com a data.
+
+Prova nos 5 dias reais, apos a correcao (corpo em chars, proporcao do cru,
+ancoras remanescentes no e-mail):
+
+```
+briefing_20260817.html  cru 1223  corpo 1148  94%  PASSA  0 ancoras
+briefing_20260818.html  cru 2457  corpo 2261  92%  PASSA  0 ancoras
+briefing_20260819.html  cru 2405  corpo 2259  94%  PASSA  0 ancoras
+briefing_20260820.html  cru 2125  corpo 1993  94%  PASSA  0 ancoras
+briefing_20260821.html  cru 1400  corpo 1263  90%  PASSA  0 ancoras
+```
+
+Os 6 a 10% que faltam sao a fonte e a confianca removidas de proposito. Antes
+da correcao o 21/08 dava 248 chars de texto no e-mail inteiro.
+
+Regressao coberta em `tests/test_pipeline_robustez.py`, classes
+`TestBriefingSemCabecalho` (T08) e `TestTravaEmailVazio` (T09), com o formato
+exato de 21/08 como fixture. Suite completa: 32 testes verdes.
+
+Regra que sai daqui: mudanca em `build_styled_email` ou no parser exige
+reprocessar os briefings reais em disco e comparar o texto visivel do corpo
+contra o do arquivo cru. O portao nao cobre essa etapa e nunca vai cobrir.
+
+## Excecao de 24/08/2026: envio a lista de clientes pre-autorizado, sem revisao previa
+
+O Yan mandou soltar o briefing de 24/08 tambem para a lista de clientes do
+relatorio diario e escolheu explicitamente o modo pre-autorizado, diferente do
+padrao de 19/08. A diferenca importa: em 19/08 ele leu o e-mail das 07h00 antes
+de aprovar, aqui o flag foi criado as 03h5x, antes de o briefing existir.
+
+Armado nesta sessao:
+
+- `logs/aprovacao_clientes_20260824.flag` criado antes da geracao do dia.
+- Task pontual `Szuchmacher-EnvioClientes` registrada para 09h00 de 24/08,
+  disparo unico, roda `run_envio_clientes.ps1` no powershell.exe 5.1 e se
+  auto-remove ao terminar, com ou sem envio.
+- Lista viva do `.env` do Fechamento: 22 destinatarios unicos apos dedup
+  (eram 21 em 19/08, entrou um endereco novo desde entao).
+- `StartWhenAvailable` deliberadamente OMITIDO na task. Se o PC estiver
+  desligado as 09h00, nada sai e a task fica registrada. Briefing matinal
+  entregue a cliente as 15h00 e pior que nao entregue.
+
+O que continua protegendo o envio, mesmo sem o olho do Yan: `enviar_briefing.py`
+revalida o HTML (`_validar`, exit 9) antes de entrar no ramo `--clientes`, entao
+conteudo reprovado no portao nao chega aos clientes nem com o flag no lugar. O
+que o modo pre-autorizado abre mao e da revisao de julgamento: um briefing
+formalmente valido, com fonte no pool e confianca no formato certo, mas com
+leitura de mercado equivocada, passa direto.
+
+A decisao de 14/08 segue como padrao geral: envio a clientes exige ordem direta
+do Yan a cada vez. O que mudou aqui foi so o momento da aprovacao, nao a regra.
+
 ## Envio avulso para outro destinatario
 
 `enviar_briefing.py` aceita `--to email@x.com` para mandar uma copia para outro endereco sem mexer no `.env`. A validacao e a sentinela de idempotencia continuam valendo. Pedido do Yan em 13/08 para revisar o material em outra caixa.

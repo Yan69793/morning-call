@@ -1,0 +1,43 @@
+{
+  "target": "briefing-interno pipeline (local Task Scheduler)",
+  "timestamp": "2026-08-24T03:50:00-03:00",
+  "question": "Esta tudo certo para o envio a lista do morning call de hoje (24/08/2026)?",
+  "git": {
+    "head": "285b867",
+    "head_message": "docs(briefing): registra MODELVAR1 no CLAUDE.md do briefing-interno",
+    "briefing_interno_status": "clean"
+  },
+  "scheduled_tasks": [
+    {"name": "Szuchmacher-BriefingMatinal", "state": "Ready", "last_run": "2026-08-23T07:00:01", "last_result": 0, "next_run": "2026-08-24T07:00:00"},
+    {"name": "Szuchmacher-BriefingWatchdog", "state": "Ready", "last_run": "2026-08-23T07:20:01", "last_result": 0, "next_run": "2026-08-24T07:20:00"},
+    {"name": "Szuchmacher-EnvioClientes", "state": "not_present", "note": "self-deleting task, only created for one-off approved client sends; absence confirms none armed for today"}
+  ],
+  "sentinels_found": [
+    "sent_20260813.flag", "sent_20260814.flag", "sent_20260817.flag",
+    "sent_20260818.flag", "sent_20260819.flag", "sent_20260821.flag",
+    "aprovacao_clientes_20260819.flag", "sent_clientes_20260819.flag"
+  ],
+  "sentinels_missing_for_today": ["sent_20260824.flag", "aprovacao_clientes_20260824.flag"],
+  "last_real_weekday_send": {
+    "date": "2026-08-21",
+    "log": "briefing_20260821_py.log",
+    "outcome": "APROVADO na tentativa 1 de 3, ENVIADO OK 07:01:47"
+  },
+  "code_fixes_verified": [
+    {"id": "W01", "file": "scripts/run_briefing.ps1", "table_status": "NOVO", "actual_status": "RESOLVIDO", "evidence": "exit usado em todos os pontos de saida (linhas 70,83,90,138,142,184,189,209,243)"},
+    {"id": "W02", "file": "scripts/run_envio_clientes.ps1:32", "table_status": "NOVO", "actual_status": "RESOLVIDO", "evidence": "$HtmlDoDia entre aspas duplas"},
+    {"id": "W03", "file": "scripts/run_envio_clientes.ps1:9", "table_status": "NOVO", "actual_status": "RESOLVIDO", "evidence": "Split-Path -Parent $PSScriptRoot, exit em vez de return"}
+  ],
+  "send_policy": {
+    "standing_decision": "2026-08-14: envio a clientes cancelado, briefing so para Yan (TO_EMAIL) + TO_EMAIL_EXTRA em BCC",
+    "last_exception": "2026-08-19, ordem pontual do Yan, lista do Fechamento",
+    "exception_for_today_found": false
+  },
+  "gaps": [
+    ".env content not read (existence only)",
+    "sz-briefing-remote /health not queried (not needed, local is primary and Ready)",
+    "Blocks C/D/E (UI, security headers, Cloudflare infra) not run, out of scope for local send pre-flight",
+    "Cannot pre-verify today's content will pass the validator gate before the 07:00 run actually happens"
+  ],
+  "findings": []
+}
