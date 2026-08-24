@@ -1,6 +1,6 @@
 # Estado do projeto — Morning Call
 
-Última atualização: 2026-08-19 (agente: Claude Code)
+Última atualização: 2026-08-24 (agente: Claude Code)
 
 Leia este arquivo antes de começar qualquer trabalho, seja qual for o agente.
 Atualize a data e os itens abertos ao fechar uma sessão que mudou o estado.
@@ -110,3 +110,38 @@ Nada pendente deste lado. Próximo teste real é o cron de hoje às 07:05 BRT (r
 que deve ficar em silêncio porque o local reivindica primeiro; conferir depois pelo
 `GET https://sz-briefing-remote.prospects-intel.workers.dev/health`, sem testar de novo
 por cima.
+
+## Estado do briefing-interno em 2026-08-24: render corrigido e envio a clientes armado
+
+Sessão de madrugada, disparada por uma pergunta de pré-voo ("está tudo certo para o envio
+de hoje"). Duas coisas mudaram.
+
+**Envio a clientes de 24/08, pré-autorizado.** O Yan mandou soltar o briefing de hoje
+também para a lista do Fechamento e escolheu o modo pré-autorizado, diferente do padrão de
+19/08 (em que ele leu o e-mail das 07h00 antes de aprovar). Flag
+`logs/aprovacao_clientes_20260824.flag` criado antes da geração do dia, task pontual
+`Szuchmacher-EnvioClientes` armada para 09h00, disparo único, auto-remove ao terminar.
+Lista viva do `.env` do Fechamento com 22 destinatários após dedup, eram 21 em 19/08.
+`StartWhenAvailable` omitido de propósito: PC desligado às 09h00 significa nada enviado,
+em vez de briefing matinal chegando ao cliente à tarde. A decisão de 14/08 segue como
+padrão geral, o que mudou foi só o momento da aprovação.
+
+**Bug P0 de render, corrigido (commit `0a25c6b`).** Um teste seco pedido pelo Yan achou que
+`build_styled_email` produz e-mail só com hero e rodapé quando o briefing vem sem
+`<h1>`/`<h2>`. Quem gera esse formato é o `meta-llama/llama-3.3-70b-instruct`, que o
+MODELVAR1 (21/08) tornou o primeiro modelo da cadeia a partir da tentativa 2. Nunca atingiu
+envio real, porque 21/08 aprovou na tentativa 1 e 22 e 23 foram fim de semana, mas bastava
+um dia útil em que a tentativa 1 reprovasse. Corrigido em duas camadas, normalização da
+entrada antes do parse e trava independente que barra envio de corpo vazio ou abaixo de 50%
+do texto cru. Detalhe em `briefing-interno/CLAUDE.md` e no
+`briefing-interno/diagnosticos/DIAGNOSTICO-2026-08-24.md`.
+
+Registro de erro desta sessão, para não repetir: a primeira leitura afirmou que o e-mail de
+21/08 tinha chegado vazio ao Yan. Ele conferiu a caixa e desmentiu. O artefato
+`outputs/briefing_20260821.html` tinha sido sobrescrito nove horas depois do envio pelo
+teste seco do MODELVAR1, então não era prova do que foi entregue. Conferir mtime contra a
+hora do envio no log antes de tratar output em disco como evidência de entrega.
+
+Pendente: o resultado real das 07h00 e das 09h00 de hoje, que ainda não aconteceram no
+momento deste registro. `git push` segue bloqueado (P-14), a `main` está 3 commits à frente
+de `origin`.
