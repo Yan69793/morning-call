@@ -35,7 +35,7 @@ export const DIRECTIONAL_PATTERNS = [
 ];
 
 export const URL_PATTERN = /https?:\/\/[^\s<>"'[\]]+/g;
-export const CITATION_PATTERN = /\[([^\[\]]+)\]/g;
+export const CITATION_PATTERN = /\[([^[\]]+)\]/g;
 export const INTERNAL_DOMAINS = ["szuchmacher.com.br", "localhost", "127.0.0.1"];
 export const CONFIANCA_PATTERN = /confian[cç]a\s*[:=]?\s*(\d+[.,]\d+)/gi;
 
@@ -120,7 +120,16 @@ function findCitations(html) {
 
 // validar: porta do main() do validador, devolvendo o mesmo shape do
 // validacao_YYYYMMDD.json + as mensagens de OK/REPROVADO.
-export function validar(html, noticias, estado, exposicao) {
+//
+// `_exposicao` e aceito e ignorado de proposito. A REGRA 3 nao le o mapa de
+// exposicao, ela casa contra a lista NOMES_PROJETOS_* hardcoded logo acima. O
+// parametro so existe para a assinatura bater com a do chamador e com a do
+// validador Python. Descoberto em 24/08/2026 quando o eslint passou a
+// enxergar este diretorio pela primeira vez. E o mesmo drift do achado T04 do
+// PENDENCIAS.md, onde o comentario do validador local promete fallback do JSON
+// e a regra usa o set fixo. Se um dia a lista sair para o JSON, e aqui que o
+// parametro volta a ter uso.
+export function validar(html, noticias, estado, _exposicao) {
   const problemas = [];
   const avisos = [];
   const mensagens = [];

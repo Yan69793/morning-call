@@ -48,7 +48,7 @@ function decodeEntities(s) {
 
 // pyStrip: str.strip() do Python, que tambem remove \xa0.
 export function pyStrip(s) {
-  return s.replace(/^[\s ]+/, "").replace(/[\s ]+$/, "");
+  return s.replace(/^[\s\u00a0]+/, "").replace(/[\s\u00a0]+$/, "");
 }
 
 function tokenizeHtml(html) {
@@ -192,7 +192,7 @@ export function stripFonteEConfianca(texto) {
   // junto com o parentese; CONFIANCA_SOLTA_RE cobre o formato sem parenteses.
   let out = texto.replace(/(\s*)\([^)]*confian[çc]a[^)]*\)/gi, "");
   out = out.replace(/(\s*)[Cc]onfian[çc]a\s*[:=]\s*\d+[.,]\d+\.?/g, "");
-  out = out.replace(/\[([^\[\]]+)\]/g, (m, inner) => {
+  out = out.replace(/\[([^[\]]+)\]/g, (m, inner) => {
     const s = pyStrip(inner);
     return URLISH_RE.test(s) ? "" : m;
   });
@@ -292,7 +292,7 @@ function numberedRow(numero, segments) {
     "font-size:14px;color:#1a2030;line-height:24px;" +
     'mso-line-height-rule:exactly;">' +
     "<span style=\"font-family:'Courier New',Courier,monospace;" +
-    `font-size:11px;color:#92703a;\">${numero}.</span>&nbsp;${inner}` +
+    `font-size:11px;color:#92703a;">${numero}.</span>&nbsp;${inner}` +
     "</td></tr>"
   );
 }
@@ -473,7 +473,7 @@ export async function sendResend({ apiKey, fromEmail, toEmail, subject, html, te
       clearTimeout(timer);
     }
   } catch (exc) {
-    throw new Error(`Resend rede/timeout: ${exc}`);
+    throw new Error(`Resend rede/timeout: ${exc}`, { cause: exc });
   }
 
   if (!resp.ok) {

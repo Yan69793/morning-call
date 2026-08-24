@@ -3,7 +3,7 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { validar, normalizeUrl } from "../src/validate/briefing.js";
 
 const REPO = new URL("../../", import.meta.url); // = briefing-interno/

@@ -166,7 +166,7 @@ async function httpGet(url, timeoutMs, fetchImpl) {
   }
 }
 
-export async function collectRss(fetchImpl, nowMs) {
+export async function collectRss(fetchImpl, _nowMs) {
   const allItems = [];
   const falhas = [];
   for (const [name, url] of FEEDS) {

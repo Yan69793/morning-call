@@ -165,7 +165,7 @@ export const forexFactoryProvider: AgendaProvider = {
       });
 
       if (!resp.ok) {
-        console.log(
+        console.warn(
           JSON.stringify({
             event: "agenda_scrape_ff_fail",
             status: resp.status,
@@ -186,7 +186,7 @@ export const forexFactoryProvider: AgendaProvider = {
       );
       return events;
     } catch (err) {
-      console.log(
+      console.warn(
         JSON.stringify({
           event: "agenda_scrape_ff_error",
           error: err instanceof Error ? err.message : "desconhecido",

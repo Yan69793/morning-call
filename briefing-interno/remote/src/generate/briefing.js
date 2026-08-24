@@ -247,7 +247,7 @@ export async function callOpenrouter({ apiKey, model, systemPrompt, userPrompt, 
       fetchImpl,
     );
   } catch (exc) {
-    throw new Error(`OpenRouter rede/timeout: ${exc}`);
+    throw new Error(`OpenRouter rede/timeout: ${exc}`, { cause: exc });
   }
 
   if (!resp.ok) {
@@ -264,7 +264,7 @@ export async function callOpenrouter({ apiKey, model, systemPrompt, userPrompt, 
   try {
     data = await resp.json();
   } catch (exc) {
-    throw new Error(`OpenRouter resposta nao-JSON: ${exc}`);
+    throw new Error(`OpenRouter resposta nao-JSON: ${exc}`, { cause: exc });
   }
   if (!data || typeof data !== "object" || Array.isArray(data)) {
     throw new Error(`OpenRouter resposta com shape inesperado: ${Array.isArray(data) ? "list" : typeof data}`);
@@ -274,7 +274,7 @@ export async function callOpenrouter({ apiKey, model, systemPrompt, userPrompt, 
   try {
     content = data.choices[0].message.content;
   } catch (exc) {
-    throw new Error(`OpenRouter resposta inesperada: ${exc}`);
+    throw new Error(`OpenRouter resposta inesperada: ${exc}`, { cause: exc });
   }
   if (!content || typeof content !== "string") {
     const finishReason = (data.choices || [{}])[0].finish_reason || "desconhecido";

@@ -42,7 +42,7 @@ export async function enviarAlerta({ env, subject, text, fetchImpl }) {
   }
 }
 
-export async function watchdog({ env, ctx, dateTag, trigger = "cron", fetchImpl, nowMs }) {
+export async function watchdog({ env, ctx, dateTag, trigger: _trigger = "cron", fetchImpl, nowMs }) {
   const now = nowMs || Date.now();
   const date = dateTag || brtToday(now);
   const pipeline = "briefing";

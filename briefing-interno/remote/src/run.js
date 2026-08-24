@@ -42,12 +42,12 @@ const MAX_TENTATIVAS = 3;
 
 export async function runPipeline({
   env,
-  ctx,
+  ctx: _ctx,
   dateTag,
   mode = "remote",
   dry = false,
   force = false,
-  trigger = "manual",
+  trigger: _trigger = "manual",
   fetchImpl,
   nowMs,
 }) {

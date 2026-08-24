@@ -75,7 +75,7 @@ export const investingProvider: AgendaProvider = {
       });
 
       if (!resp.ok) {
-        console.log(
+        console.warn(
           JSON.stringify({
             event: "agenda_scrape_inv_fail",
             status: resp.status,
@@ -131,7 +131,7 @@ export const investingProvider: AgendaProvider = {
       );
       return events;
     } catch (err) {
-      console.log(
+      console.warn(
         JSON.stringify({
           event: "agenda_scrape_inv_error",
           error: err instanceof Error ? err.message : "desconhecido",
