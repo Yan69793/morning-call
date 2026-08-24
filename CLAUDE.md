@@ -53,27 +53,25 @@ Ordenado por urgência, não por severidade técnica.
    dias úteis consecutivos passando a REGRA 6 sem intervenção manual. Só então criar o
    flag `logs/aprovacao_clientes_<data>.flag`, que é ato deliberado e nunca rotina.
 
-2. **Lint do monorepo reprova, e o motivo é pior que estilo.** `npm run lint` sai com
-   19 erros e 8 avisos. Estado anterior a 24/08, provado, nenhum commit desta data tocou
-   os arquivos que falham e o `eslint.config.js` só trocou `apps/radar-quant/` por
-   `radar-quant-brasil/` no ignore.
+2. **O Worker de reserva ficou para trás do portão numérico.** Achado em 24/08, e é
+   consequência direta da correção do mesmo dia ter tocado só um dos dois caminhos.
 
-   Os 19 erros são todos `Parsing error: was not found by the project service` em
-   `briefing-interno/remote/`, 12 arquivos em `src/` e 7 testes `.mjs`. O diretório não
-   tem `tsconfig` próprio e não está no ignore do ESLint, então a ferramenta não consegue
-   abrir nenhum deles. **Não é que esses arquivos reprovaram, é que nunca foram
-   verificados.** E são o Worker de reserva que envia o briefing quando a máquina local
-   está desligada, ou seja, código de caminho de envio sem análise estática nenhuma desde
-   que nasceu em 19/08.
+   O pipeline local ganhou injeção de cotação no prompt e a REGRA 6 no validador. O
+   `briefing-interno/remote/`, que roda no Cloudflare às 07:05 quando a máquina está
+   desligada, tem zero dos dois. Medido, `grep` por `precos` em
+   `remote/src/generate/briefing.js` dá 0, e por `REGRA 6` em
+   `remote/src/validate/briefing.js` dá 0, contra 3 e 8 nos equivalentes locais.
 
-   Ignorar é o conserto errado. `remote/` é fonte, não bundle gerado, diferente das
-   entradas que já estão no ignore (`dist/`, `dist-assets/`, `.wrangler/`, worktrees).
-   O caminho é dar um `tsconfig` ao `remote/` ou incluí-lo num existente, e então ver o
-   que o lint tem a dizer sobre 19 arquivos que ninguém nunca checou.
+   Na prática, num dia em que o local não reivindique a corrida, o briefing sai com
+   número que ninguém conferiu, exatamente o defeito de 20/08.
 
-   Os 8 avisos são `no-console` em `apps/morning-call/src/data/agenda/`, cosméticos ao
-   lado disso. Enquanto não fechar, o portão de aceite acima não passa limpo. Test e
-   typecheck estão verdes, 317 testes em 24/08.
+   Alcance limitado, e isso é o que segura a severidade. O remote manda para um
+   destinatário único (`to: [toEmail]`) e a seção "Fallback remoto" abaixo registra que o
+   local é o único caminho com `--clientes`. Cliente não recebe pelo remoto hoje.
+
+   A armadilha é para depois. Quem ligar cliente no caminho remoto sem portar a REGRA 6
+   reabre o buraco inteiro sem perceber, porque o local vai estar verde. Portar antes de
+   qualquer mudança no alcance do remote.
 
 3. **Resolução CVM 20 não verificada.** Distribuir análise direcional com nível de
    confiança para 22 pessoas entra no território de analista de valores mobiliários. O
@@ -90,16 +88,41 @@ Ordenado por urgência, não por severidade técnica.
    MC-019, a tabela `agent_calls` existe e nada escreve nela, então não há custo por
    agente.
 
-5. **DEPLOY-03, worker órfão.** `szuchmacher-briefing` existe na conta Cloudflare, id
+5. **Um teste do remote falha por drift de artefato, não por bug.** A suíte própria do
+   `briefing-interno/remote/` (`npm test` lá dentro, não entra no `npm test` da raiz) tem
+   34 casos, 33 passam. O que falha é `buildUserPrompt bate byte a byte com o Python`.
+
+   Ele lê `Site/site-producao/agenda-data.json`, arquivo vivo, e compara contra uma
+   fixture congelada em 18/08. A agenda andou, então a fixture não bate mais. Diferença
+   localizada na posição 15387, onde o esperado tem os eventos de 18/08 e a execução atual
+   produz "NENHUM evento confirmado para hoje".
+
+   Verificado que é anterior às mudanças de 24/08, mesma contagem com e sem elas, medido
+   com `git stash`. Mesma classe do achado Q02, teste acoplado a artefato vivo. O conserto
+   é congelar a agenda numa fixture própria, não regenerar o esperado, que só empurra o
+   drift para a frente.
+
+6. **DEPLOY-03, worker órfão.** `szuchmacher-briefing` existe na conta Cloudflare, id
    `1bf0b671370f46089aac738257d753ab`, criado em 17/06 e sem deploy desde 20/07. Sem
    nenhuma referência no repo. Apagar Worker é destrutivo, precisa de ordem tua.
 
-6. **REGRA 6 cobre só 15 ativos.** O portão numérico confere o que está em
+7. **REGRA 6 cobre só 15 ativos.** O portão numérico confere o que está em
    `ATIVOS_META` (`briefing-interno/scripts/_comum.py`). Qualquer número fora dessa lista,
    ação estrangeira, dado de emprego, exportação, passa sem conferência automática e fica
    por conta do revisor humano (`briefing-interno/templates/checklist-qa.md`).
 
-7. **`comparar_realizado.py` adiado.** O registro de visão diária começou em 24/08 com
+8. **`comparar_realizado.py` adiado.** O registro de visão diária começou em 24/08 com
    `gravar_visao.py`. O comparador contra o realizado só faz sentido com série, alvo de 30
    dias úteis em `briefing-interno/visao/`. Construir antes é gerador de relatório sem nada
    para relatar.
+
+### Fechadas em 2026-08-24
+
+- **Lint do monorepo.** Estava vermelho com 19 erros, todos `Parsing error` em
+  `briefing-interno/remote/` por falta de tsconfig, o que significava que 19 arquivos do
+  Worker de reserva nunca tinham passado por análise estática. Resolvido com
+  `disableTypeChecked` restrito ao diretório, mantendo as regras sintáticas. Os 18
+  problemas reais que apareceram foram corrigidos, incluindo dois NBSP invisíveis dentro
+  de um literal de regex e quatro `throw` que perdiam o stack da causa. O portão
+  (`npm test && npm run typecheck && npm run lint`) fecha limpo, 317 testes e exit 0 nos
+  três.
