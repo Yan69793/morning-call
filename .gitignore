@@ -86,13 +86,13 @@ secrets.json
 # VITE_MORNING_CALL_API_URL — endpoints públicos, compilados no bundle do
 # Vite por natureza. Não são segredos, e o build de produção precisa deles.
 # Vem depois de `.env.*` para sobrepor a negação acima.
-!apps/radar-quant/frontend/.env.production
+!radar-quant-brasil/frontend/.env.production
 
 # --- 4c) Artefatos gerados pela automação do scan diário -------------
 # Dados de mercado gerados, não código. A seção 3 liberaria os .json.
-apps/radar-quant/scripts/bars.json
-apps/radar-quant/scripts/news.json
-apps/radar-quant/scripts/out/
+radar-quant-brasil/scripts/bars.json
+radar-quant-brasil/scripts/news.json
+radar-quant-brasil/scripts/out/
 
 # --- 4d) Playwright, screenshots e dumps de sessão -------------------
 # .png renderiza a UI e não é pesquisável por grep.

@@ -60,7 +60,7 @@ export default tseslint.config(
       // produção geraria dezenas de erros que não são bug, só divergência de convenção — e a
       // reorganização de pastas não é a hora de reabrir a convenção de outro projeto.
       // Reavaliar quando os dois apps convergirem de propósito, não como efeito colateral.
-      "apps/radar-quant/",
+      "radar-quant-brasil/",
     ],
   },
 );

@@ -8,7 +8,7 @@ reabrir sem evidência nova (preferência do projeto: só revisar posição dian
 ## AD-8 — Monorepo: Morning Call e Radar Quant Brasil, sobre um núcleo compartilhado
 
 **Decisão (2026-07-15):** este repositório deixa de ser "o Morning Call" e passa a hospedar dois
-apps com deploys independentes (`apps/morning-call`, `apps/radar-quant`) sobre um pacote comum
+apps com deploys independentes (`apps/morning-call`, `radar-quant-brasil`) sobre um pacote comum
 (`packages/analytics`). O Radar Quant Brasil **continua sendo produto próprio**, com seu D1
 (`radar-quant`), seu KV, seu Worker e seu dashboard. Não foi absorvido nem congelado.
 

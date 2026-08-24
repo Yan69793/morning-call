@@ -15,7 +15,7 @@
 *   **Comando de Análise Estática (Linter):** `tsc --noEmit` (typecheck — não há linter dedicado configurado)
 
 > **Este projeto agora vive num monorepo** (`ARCHITECTURE.md` AD-8 na raiz). Mudou o seguinte:
-> - `dashboard/worker` → `apps/radar-quant/worker`; `dashboard/frontend` → `apps/radar-quant/frontend`.
+> - `dashboard/worker` → `radar-quant-brasil/worker`; `dashboard/frontend` → `radar-quant-brasil/frontend`.
 > - `dashboard/shared` → **`packages/analytics`** (`@sz/analytics`), compartilhado com o Morning Call.
 > - `scripts/type-sync.ps1` **foi removido**: existia para conferir se `shared/types.ts`,
 >   `worker/src/types.ts` e `frontend/src/types/index.ts` continuavam iguais, e só sabia detectar a

@@ -19,7 +19,7 @@ Fonte de cada linha: API da Cloudflare (`workers_list`, `d1_databases_list`, `kv
 | R2 | `morning-call-reports` | Relatórios diários, D1 guarda só o ponteiro |
 | Domínio | `morning-call.prospects-intel.workers.dev` | |
 
-## Radar Quant Brasil (`apps/radar-quant`, neste repo)
+## Radar Quant Brasil (`radar-quant-brasil`, neste repo)
 
 | Recurso | Nome / ID | Observação |
 |---|---|---|

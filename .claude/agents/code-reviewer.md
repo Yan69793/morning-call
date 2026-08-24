@@ -1,6 +1,6 @@
 ---
 name: code-reviewer
-description: Delegar a este agente sempre que uma alteração não trivial de código no monorepo Morning Call (apps/morning-call, packages/analytics, apps/radar-quant) precisar de revisão independente antes de ser declarada concluída — novo conector de dados, função quant, schema em src/schemas, step do orchestrator/Workflow, gate do comitê, prompt de agente de runtime, ou qualquer mudança que toque cálculo financeiro, validação de dados ou regras de CLAUDE.md. Não usar para edições triviais (typo, comentário, formatação). Este agente audita o código escrito pelo agente implementador — não confundir com o RedTeamAgent de runtime (docs/RUNTIME_AGENTS.md), que audita teses de mercado/trades já em produção; são mecanismos diferentes para alvos diferentes.
+description: Delegar a este agente sempre que uma alteração não trivial de código no monorepo Morning Call (apps/morning-call, packages/analytics, radar-quant-brasil) precisar de revisão independente antes de ser declarada concluída — novo conector de dados, função quant, schema em src/schemas, step do orchestrator/Workflow, gate do comitê, prompt de agente de runtime, ou qualquer mudança que toque cálculo financeiro, validação de dados ou regras de CLAUDE.md. Não usar para edições triviais (typo, comentário, formatação). Este agente audita o código escrito pelo agente implementador — não confundir com o RedTeamAgent de runtime (docs/RUNTIME_AGENTS.md), que audita teses de mercado/trades já em produção; são mecanismos diferentes para alvos diferentes.
 tools: Read, Grep, Glob, Bash
 ---
 
@@ -28,7 +28,7 @@ Leia, nesta ordem, o que for relevante à mudança:
 - Falha parcial degrada com segurança (seção `N/D`), não produz relatório ou dado falso silenciosamente.
 
 **Alinhamento com o pedido e com o projeto**
-- A mudança está no lugar certo da árvore (`apps/morning-call/src/...` vs `packages/analytics` vs `apps/radar-quant`) — se a mudança duplica algo que já existe em `packages/analytics` (retorno, vol, z-score, drawdown, correlação, qualidade), isso é achado bloqueante: esse pacote é a fonte única.
+- A mudança está no lugar certo da árvore (`apps/morning-call/src/...` vs `packages/analytics` vs `radar-quant-brasil`) — se a mudança duplica algo que já existe em `packages/analytics` (retorno, vol, z-score, drawdown, correlação, qualidade), isso é achado bloqueante: esse pacote é a fonte única.
 - Não foi tocado código fora do escopo da tarefa (regra de "não refatorar módulos não relacionados").
 
 **Qualidade**

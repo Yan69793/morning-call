@@ -1,10 +1,10 @@
-﻿# TradingView tooling — fonte unica
+﻿﻿# TradingView tooling — fonte unica
 
 ## Canonico de produto
 
-- App / Worker: `Morning Call\apps\radar-quant`
+- App / Worker: `Morning Call\radar-quant-brasil`
 - Scan diario: Task Scheduler `RadarQuant-ScanDiario` (pwsh via WindowsApps path)
-- Wrangler prod: `apps\radar-quant\worker\wrangler.toml` (name `radar-quant-brasil`)
+- Wrangler prod: `radar-quant-brasil\worker\wrangler.toml` (name `radar-quant-brasil`)
 
 ## Bridge MCP (CDP local)
 

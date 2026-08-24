@@ -65,7 +65,7 @@
 **Depends on:** none
 
 ### Task 9: null real no lugar de `?? 0` no signals.ts (B-004/B-005/B-006)
-**File:** `E:\Diretorio\Claude\FREQUENTE\Morning Call\apps\radar-quant\worker\src\routes\signals.ts`
+**File:** `E:\Diretorio\Claude\FREQUENTE\Morning Call\radar-quant-brasil\worker\src\routes\signals.ts`
 **Action:** Edit
 **What to do:** Linhas 50-54: `ibovScore`, `vixLast`, `usdbrlLast` passam a `?? null` tipados `number | null`. `vixRiscoOff` passa a `vixLast === null ? null : vixLast >= 25` (sem dado não abre risco nem fecha).
 **Verification:** `npm run typecheck` acusa os pontos que ainda esperam number (ajustar nas tasks 10-12 até ficar limpo).
@@ -79,14 +79,14 @@
 **Depends on:** 9
 
 ### Task 11: contrato nulável no payload parseado (B-007)
-**File:** `E:\Diretorio\Claude\FREQUENTE\Morning Call\apps\radar-quant\worker\src\routes\signals.ts`
+**File:** `E:\Diretorio\Claude\FREQUENTE\Morning Call\radar-quant-brasil\worker\src\routes\signals.ts`
 **Action:** Edit
 **What to do:** Antes de chamar o motor, guardar os campos do item com checagem `typeof` (score, metrics.ret_20d, rangePos_60d, upDays_5, quality.symbolError); item sem esses dados devolve 422/"dados insuficientes" em vez de seguir com null coageado.
 **Verification:** teste de rota com scan fixture sem `metrics` devolvendo erro controlado, sem 500; `npm test -w @sz/radar-quant-worker` passa.
 **Depends on:** 9
 
 ### Task 12: MacroCtx e prompt tratam sem dado (B-006)
-**File:** `E:\Diretorio\Claude\FREQUENTE\Morning Call\apps\radar-quant\worker\src\lib\anthropic.ts`
+**File:** `E:\Diretorio\Claude\FREQUENTE\Morning Call\radar-quant-brasil\worker\src\lib\anthropic.ts`
 **Action:** Edit
 **What to do:** `MacroCtx.ibovScore`, `vixLast`, `usdbrlLast` viram `number | null`; no builder de prompt, null vira o texto "sem dado" em vez de 0.
 **Verification:** `npm run typecheck` limpo e teste do builder de prompt com null não emitindo "0".
@@ -102,7 +102,7 @@
 ### Task 14: commits separados por bloco
 **File:** repo
 **Action:** Run
-**What to do:** commit 1 com os arquivos do briefing-interno (tasks 1-8); commit 2 com signals.ts, signal-rules.ts, anthropic.ts e testes (tasks 9-12). Mensagens `fix(briefing-interno): ...` e `fix(radar-quant): ...` no estilo do repo. Não incluir `apps/radar-quant/scripts/register-scan-diario-task.ps1`.
+**What to do:** commit 1 com os arquivos do briefing-interno (tasks 1-8); commit 2 com signals.ts, signal-rules.ts, anthropic.ts e testes (tasks 9-12). Mensagens `fix(briefing-interno): ...` e `fix(radar-quant): ...` no estilo do repo. Não incluir `radar-quant-brasil/scripts/register-scan-diario-task.ps1`.
 **Verification:** `git status` limpo exceto o arquivo alheio; `git log -2` mostra os dois commits.
 **Depends on:** 13
 

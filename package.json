@@ -7,8 +7,8 @@
   "workspaces": [
     "packages/analytics",
     "apps/morning-call",
-    "apps/radar-quant/worker",
-    "apps/radar-quant/frontend"
+    "radar-quant-brasil/worker",
+    "radar-quant-brasil/frontend"
   ],
   "scripts": {
     "test": "npm run test --workspaces --if-present",

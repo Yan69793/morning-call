@@ -4,7 +4,7 @@
     {
       "name": "radar-quant-frontend",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--prefix", "apps/radar-quant/frontend"],
+      "runtimeArgs": ["run", "dev", "--prefix", "radar-quant-brasil/frontend"],
       "port": 5173
     }
   ]
