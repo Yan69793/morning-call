@@ -1,0 +1,44 @@
+{
+  "houve_briefing": true,
+  "arquivo": "briefing_20260824.html",
+  "n_chamadas": 4,
+  "chamadas": [
+    {
+      "trecho": "m 7674.37 pontos, com variação de +0.43%. O VIX fechou em 15.13, com variação de -5.50%. Esses movimentos indicam uma tendência de alta nos mercados, tende a subir (confianca: 0.8) Fonte: InfoMoney . O QUE IMPORTA HOJE 1. Boletim Focus : O Boletim Focus do BCB será divulgado hoje, e é esperado que traga informaç",
+      "direcao": "alta",
+      "confianca": 0.8,
+      "ativos": [
+        "VIX"
+      ],
+      "referencia": {
+        "VIX": {
+          "close": 15.13,
+          "trade_date": "2026-08-21"
+        }
+      }
+    },
+    {
+      "trecho": "tos estão intensificando suas campanhas. De acordo com as pesquisas, Lula tem 46% contra 45% de Flávio no 2º turno, o que pode influenciar o mercado, deve cair (confianca: 0.4) Fonte: Poder360 . 3. ONS suspende geração excedente de energia : A ONS suspendeu a geração excedente de energia pela segunda vez no",
+      "direcao": "baixa",
+      "confianca": 0.4,
+      "ativos": [],
+      "referencia": {}
+    },
+    {
+      "trecho": "suspende geração excedente de energia : A ONS suspendeu a geração excedente de energia pela segunda vez no ano, o que pode afetar o setor de energia, vai valorizar (confianca: 0.9) Fonte: Agencia Brasil . AGENDA DO DIA - 08:25 (BR): Boletim Focus [BCB]",
+      "direcao": "alta",
+      "confianca": 0.9,
+      "ativos": [],
+      "referencia": {}
+    },
+    {
+      "trecho": "im Focus do BCB será divulgado hoje, e é esperado que traga informações importantes sobre a economia brasileira. Com base nas expectativas, o mercado tende a pressionar (confianca: 0.6) Fonte: InfoMoney . 2. Eleições 2026 : As eleições 2026 estão se aproximando, e os candidatos estão intensificando suas campanhas. De",
+      "direcao": "indefinida",
+      "confianca": 0.6,
+      "ativos": [],
+      "referencia": {}
+    }
+  ],
+  "data": "2026-08-24",
+  "gravado_em": "2026-08-24T07:01:58.670407-03:00"
+}

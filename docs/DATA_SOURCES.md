@@ -12,7 +12,8 @@
 # Fontes de Dados — endpoints verificados
 
 Índice: [Regras](#regras) · [BCB](#bcb) · [Tesouro](#tesouro) · [ANBIMA](#anbima) · [B3](#b3) ·
-[FRED](#fred) · [US Treasury](#us-treasury) · [Mercado/FX/cripto](#mercado) · [Matriz](#matriz)
+[FRED](#fred) · [US Treasury](#us-treasury) · [Mercado/FX/cripto](#mercado) · [Matriz](#matriz) ·
+[Unidade e tolerância](#tolerancia)
 
 Endpoints marcados ✅ foram testados ao vivo (jul/2026). Sempre gravar `source`+`timestamp`+
 `as_of` junto do dado. Sem fonte confiável → `N/D — REQUER VERIFICAÇÃO`.
@@ -39,6 +40,13 @@ https://api.bcb.gov.br/dados/serie/bcdata.sgs.{CODIGO}/dados/ultimos/{N}?formato
 
 - Desde 26/03/2025: **filtros obrigatórios** (limite de volume). Consulta por período limitada a
   **10 anos** por chamada (senão erro). Datas em `dd/MM/aaaa`.
+- `ultimos/{N}` tem teto de **20 valores**. Acima disso devolve HTTP 400 com
+  `A quantidade máxima de valores deve ser 20`. Medido em 24/08/2026, `ultimos/20` passa e
+  `ultimos/25` falha.
+- **Séries de meta são publicadas para frente.** A `432` (meta Selic) é diária e vai até a
+  vigência da próxima reunião do Copom. Em 24/08/2026 os 20 últimos valores iam de 28/08 a
+  16/09, todos futuros. Para saber a taxa em vigor hoje, usar consulta por período com
+  `dataFinal` amarrada em hoje, nunca `ultimos/N`.
 - Resposta: `[{"data":"14/07/2026","valor":"0.052531"}]`.
 - Testado ✅: `.../bcdata.sgs.11/dados/ultimos/1?formato=json` → Selic diária.
 
@@ -155,8 +163,33 @@ Testado ✅ (`.../v1/accounting/od/rates_of_exchange`). Docs:
 
 ## Mercado / FX / commodities / cripto (índices, ações, cripto)
 
-Yahoo Finance **descontinuou API oficial** — não depender de scraping. Opções com free tier
-(confirmar limites/licença antes de produção):
+### Yahoo Finance v8 chart ✅ (em produção, não oficial)
+
+```
+https://query1.finance.yahoo.com/v8/finance/chart/{SIMBOLO}?interval=1d&range=1mo
+```
+
+Sem chave, sem cookie, sem crumb, só `User-Agent`. Testado ao vivo 24/08/2026, HTTP 200 nos
+14 símbolos. **É o que o briefing usa hoje**, em `briefing-interno/scripts/_comum.py`
+(`YAHOO_SYMBOLS`) e `coletar_precos.py`. Cobre `^BVSP`, `BRL=X`, `^GSPC`, `^VIX`, `DX-Y.NYB`,
+`GC=F`, `CL=F`, `BTC-USD` e as ações `.SA`.
+
+Este arquivo dizia até 24/08/2026 que o Yahoo tinha descontinuado a API e que não se devia
+depender dele. A afirmação estava em conflito com o código em produção, que depende. Registrado
+como está de fato, com o risco explícito: endpoint não contratual, pode sair do ar sem aviso, e
+por isso o dólar tem PTAX como fonte primária e o Yahoo só como segunda opinião.
+
+**Armadilha das barras.** A resposta traz barras que não são pregão encerrado. Medido em
+24/08/2026 (segunda): `^BVSP` vinha com uma barra sintética de sexta 22:59 cujo `timestamp` é o
+próprio `regularMarketTime`, duplicando a data do fechamento oficial com valor diferente
+(170.448,875 contra 171.032,0); `BRL=X` trazia barra do dia corrente às 07:42; `CL=F` já tinha
+barra diária de 24/08 incompleta. Pegar a última barra erra nos três. A regra usada em
+`_barras_diarias` é descartar data >= hoje, descartar `ts == regularMarketTime`, e deduplicar por
+data ficando com a primeira ocorrência.
+
+### Alternativas com chave
+
+Opções com free tier (confirmar limites/licença antes de produção):
 
 - **Alpha Vantage** (`alphavantage.co`) — ações/FX/commodities/cripto + indicadores; free tier baixo.
 - **Finnhub** (`finnhub.io`) — realtime ações/FX/cripto; ~60 req/min no free.
@@ -182,4 +215,38 @@ Yahoo Finance **descontinuou API oficial** — não depender de scraping. Opçõ
 | Treasuries/CPI/breakeven/Brent                      | FRED                             | **sim (grátis)** | grátis         | ✅           |
 | Par yield curve US                                  | US Treasury XML                  | não              | grátis         | ✅           |
 | Ações/FX/commodities/cripto                         | Alpha Vantage/Finnhub/Twelve/FMP | sim              | free tier→pago | —            |
+| Índices/ações/commodities/cripto EOD (**em uso**)   | Yahoo Finance v8 chart           | não              | grátis         | ✅           |
 | Vol implícita / fluxo / spreads secundário intraday | provedor pago                    | sim              | **pago**       | —            |
+
+A linha "Índices/DI/EOD BR → B3" acima descreve o destino, não o que roda. O fechamento de
+Ibovespa que entra no briefing vem do Yahoo, não da B3.
+
+<a name="tolerancia"></a>
+
+## Unidade e tolerância de comparação
+
+Definido em 24/08/2026 junto com a REGRA 6 do `validar_briefing.py`, que confronta cada nível de
+mercado citado no briefing com a cotação real. Não havia convenção anterior neste projeto.
+
+Tolerância única não serve. Um por cento sobre 5,16 são cinco centavos, um por cento sobre
+170.000 são 1.700 pontos. O mesmo número é erro grosseiro num ativo e ruído no outro.
+
+| Classe | Unidade | Tolerância | Ativos |
+| --- | --- | --- | --- |
+| índice | % | 0,5 | IBOV, SPX |
+| câmbio | % | 1,0 | USDBRL, DXY |
+| ação | % | 0,5 | PETR4, VALE3, ITUB4, BBDC4, ABEV3, WEGE3 |
+| commodity | % | 0,5 | GOLD, WTI |
+| volatilidade | % | 2,0 | VIX |
+| cripto | % | 1,5 | BTC |
+| juro | ponto-base | 5 | SELIC |
+
+Juro se compara em ponto-base porque 0,25 p.p. é uma decisão de Copom inteira, não
+arredondamento. Retorno e nível de preço se comparam em percentual.
+
+A tolerância de 1% no câmbio não é folga arbitrária. PTAX é fixing das 13h e o Yahoo `BRL=X` é
+spot de 24h, então divergem de forma legítima. Medido em 21/08/2026: PTAX 5,1625 contra Yahoo
+5,1931, diferença de 0,593%.
+
+Valores canônicos em `briefing-interno/scripts/_comum.py`, `ATIVOS_META`. Esta tabela é a
+explicação, o código é a fonte.

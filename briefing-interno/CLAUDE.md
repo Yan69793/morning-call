@@ -24,10 +24,41 @@ Task Scheduler (07h00, dias uteis)
      -> run_briefing.ps1          (orquestra, decide dia util, idempotencia)
         -> coletar_noticias.py    (RSS BR + Finnhub global)
         -> coletar_estado.py      (GET nos 3 workers + mapa de exposicao)
+        -> coletar_precos.py      (Yahoo v8 + BCB PTAX/SGS, fechamento do pregao)
         -> gerar_briefing.py      (OpenRouter, primario + reserva)
         -> validar_briefing.py    (PORTAO, reprova aborta o envio)
         -> enviar_briefing.py     (Resend)
+        -> gravar_visao.py        (track record, pos-envio, nao altera exit code)
 ```
+
+## Portao numerico (REGRA 6), desde 24/08/2026
+
+Ate 24/08 o `gerar_briefing.py` so recebia cotacao dentro do ramo
+`if yahoo.get("acionado")` do estado, que exige Radar Quant stale ha mais de 2
+dias. Em 4 de 9 arquivos `estado_*.json` havia preco. Nos outros dias o modelo
+escrevia nivel de mercado de memoria. O briefing de 20/08/2026 saiu afirmando
+Ibovespa em 118.753,48 quando o fechamento de 19/08 foi 167.830, e passou as
+regras 1 a 5 limpo, porque nenhuma delas olhava valor.
+
+Agora `coletar_precos.py` grava `logs/precos_<data>.json` com `trade_date` do
+pregao, o preco entra no prompt sempre, e a REGRA 6 confronta cada nivel citado
+com a cotacao. Tolerancia por classe de ativo em `_comum.py` (`ATIVOS_META`),
+explicada em `docs/DATA_SOURCES.md`.
+
+A REGRA 6 e falha fechada: sem arquivo de precos, ou com arquivo vazio, ela
+reprova. Numero citado sem marcador de unidade (`R$`, `US$`, `pontos`, `% ao
+ano`) nao entra na conta, e numero em frase de projecao tambem nao, para nao
+reprovar "o JPMorgan projeta o dolar a R$ 5,50".
+
+Aceite, roda contra o defeito real:
+
+```
+python scripts/coletar_precos.py
+python scripts/validar_briefing.py outputs/briefing_20260820.html
+```
+
+Tem que reprovar IBOV e aprovar USDBRL. Se passar nos dois, a regra parou de
+medir. Testes offline em `tests/test_regra6_numeros.py`.
 
 ## Fallback remoto (sz-briefing-remote)
 

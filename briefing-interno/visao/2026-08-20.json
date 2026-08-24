@@ -1,0 +1,23 @@
+{
+  "houve_briefing": true,
+  "arquivo": "briefing_20260820.html",
+  "n_chamadas": 2,
+  "chamadas": [
+    {
+      "trecho": "a dispararam 90% após uma vacina personalizada contra câncer ter resultado positivo em teste (confianca: 0.7) G1 . O resultado positivo pode gerar um viés de alta para o setor de biotecnologia. AGENDA DO DIA 09:30 (US): EUA — Novos pedidos de seguro-desemprego [Department of Labor] 11:00 (US): EUA — Vendas de i",
+      "direcao": "alta",
+      "confianca": 0.7,
+      "ativos": [],
+      "referencia": {}
+    },
+    {
+      "trecho": "Exportação de Carne Bovina. As exportações de carne bovina caíram 26% em agosto, com o temor de uma tarifa maior na China (confianca: 0.6) G1 . Isso tende a pressionar os preços da carne no mercado interno, afetando o setor agropecuário. 5. Ações da Moderna Disparam. As ações da Moderna dispararam 90% após uma vacin",
+      "direcao": "indefinida",
+      "confianca": 0.6,
+      "ativos": [],
+      "referencia": {}
+    }
+  ],
+  "data": "2026-08-20",
+  "gravado_em": "2026-08-24T05:52:17.986614-03:00"
+}

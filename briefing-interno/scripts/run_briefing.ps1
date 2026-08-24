@@ -78,8 +78,21 @@ if ($coberturaAte -and $coberturaAte -lt $DateTag) {
 
 $hoje = Get-Date
 $diaSemana = $hoje.DayOfWeek.value__  # 0=Sunday
+# Dia sem briefing tambem entra no historico de visao, com motivo. Serie que
+# so registra os dias em que o pipeline rodou nao distingue "acertei 6 de 10"
+# de "rodei em 10 dos 18 dias uteis". Isso e vies de selecao e nao tem como
+# limpar depois, por isso o registro do buraco e feito na hora.
+function Registrar-SemBriefing($motivo) {
+    try {
+        $null = Run-Python (Join-Path $ScriptRoot 'gravar_visao.py') @('--sem-briefing', $DateTag, $motivo)
+    } catch {
+        Log "AVISO: gravar_visao.py --sem-briefing falhou e foi ignorado. $($_.Exception.Message)"
+    }
+}
+
 if ($diaSemana -eq 0 -or $diaSemana -eq 6) {
     Log "Fim de semana. Nada a fazer."
+    Registrar-SemBriefing 'fim de semana'
     exit 0
 }
 
@@ -87,6 +100,7 @@ $hojeISO = $hoje.ToString('yyyy-MM-dd')
 $feriadoHoje = $feriados.feriados | Where-Object { $_.data -eq $hojeISO }
 if ($feriadoHoje) {
     Log "Feriado B3: $($feriadoHoje.nome). Nada a fazer."
+    Registrar-SemBriefing "feriado B3: $($feriadoHoje.nome)"
     exit 0
 }
 
@@ -110,6 +124,24 @@ $exitCode = Run-Python (Join-Path $ScriptRoot 'coletar_estado.py')
 Log "coletar_estado.py exit $exitCode"
 if ($exitCode -ne 0) {
     Log "AVISO: coletar_estado.py falhou (exit $exitCode). O briefing pode ficar incompleto."
+}
+
+# ============================================================
+# PASSO 2.2: coletar cotacoes (portao numerico)
+# ============================================================
+# Roda antes do gerar_briefing.py porque o preco entra no prompt. Sem este
+# passo o modelo escreve nivel de mercado de memoria: em 20/08/2026 o briefing
+# saiu com Ibovespa em 118.753,48 quando o fechamento de 19/08 foi 167.830.
+#
+# Falha aqui nao aborta o pipeline. O gerar_briefing.py detecta a ausencia e
+# instrui o modelo a nao citar nivel nenhum, e a REGRA 6 do validar_briefing.py
+# reprova se ele citar mesmo assim. Abortar aqui trocaria "briefing sem numero"
+# por "briefing nenhum", que e pior.
+Log "PASSO 2.2: coletar_precos.py"
+$exitCode = Run-Python (Join-Path $ScriptRoot 'coletar_precos.py')
+Log "coletar_precos.py exit $exitCode"
+if ($exitCode -ne 0) {
+    Log "AVISO: coletar_precos.py falhou (exit $exitCode). O briefing sai sem cotacao e a REGRA 6 reprova qualquer nivel citado."
 }
 
 # ============================================================
@@ -239,5 +271,24 @@ if ($exitCode -eq 0) {
 } else {
     Log "ERRO: envio falhou (exit $exitCode)."
 }
+
+# ============================================================
+# PASSO 6: registrar a visao do dia (track record)
+# ============================================================
+# Roda DEPOIS do envio e nao pode derrubar nada. Chamada direcional nao tem
+# backfill honesto, entao vale a pena registrar todo dia, mas nao vale o risco
+# de um passo de contabilidade matar o e-mail das 07h.
+#
+# Tres protecoes: roda por ultimo, o try/catch engole qualquer excecao, e o
+# $exitCode do envio e salvo antes e restaurado depois. O exit do script
+# continua sendo o do envio, que e o que o Task Scheduler e o watchdog leem.
+$exitEnvio = $exitCode
+try {
+    $visaoExit = Run-Python (Join-Path $ScriptRoot 'gravar_visao.py') @($briefingPath)
+    Log "gravar_visao.py exit $visaoExit"
+} catch {
+    Log "AVISO: gravar_visao.py lancou excecao e foi ignorado. $($_.Exception.Message)"
+}
+$exitCode = $exitEnvio
 
 exit $exitCode

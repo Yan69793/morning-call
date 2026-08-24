@@ -138,16 +138,57 @@ def _bloco_agenda(data_tag: str) -> str:
     return "=== AGENDA DO DIA (dados oficiais, use SOMENTE estes eventos) ===\n" + "\n".join(linhas)
 
 
+def _bloco_precos(precos: dict) -> str:
+    """Cotacao de fechamento para o prompt. Sempre, nao so em fallback.
+
+    Ate 24/08/2026 preco so chegava ao modelo dentro do ramo
+    `if yahoo.get("acionado")` do estado, que exige Radar Quant stale ha mais
+    de 2 dias. Nos outros dias o prompt nao trazia cotacao nenhuma e o modelo
+    escrevia o nivel de memoria: o briefing de 20/08 saiu com Ibovespa em
+    118.753,48 quando o fechamento de 19/08 foi 167.830.
+    """
+    ativos = (precos or {}).get("ativos", {})
+    if not ativos:
+        return (
+            "=== COTACOES ===\n"
+            "INDISPONIVEL. Nao cite nivel, cotacao ou pontuacao de nenhum ativo "
+            "neste briefing. Fale de direcao e de causa, sem numero de mercado."
+        )
+
+    linhas = ["=== COTACOES (fechamento do ultimo pregao encerrado) ==="]
+    linhas.append(
+        "Use EXATAMENTE estes numeros ao citar nivel de mercado. Nao arredonde "
+        "para valor diferente, nao complete de memoria, nao cite ativo que nao "
+        "esteja nesta lista. O portao de validacao confere cada nivel citado "
+        "contra esta tabela e reprova o briefing fora da tolerancia."
+    )
+    for ticker, d in ativos.items():
+        var = d.get("change_percent")
+        var_txt = f", var {var:+.2f}%" if isinstance(var, (int, float)) else ""
+        linhas.append(
+            f"  {ticker}: {d.get('close')} (pregao {d.get('trade_date')}{var_txt}) "
+            f"[{d.get('fonte', 'n/d')}]"
+        )
+    erros = (precos or {}).get("erros") or []
+    if erros:
+        linhas.append(f"  Ativos sem cotacao nesta coleta: {len(erros)}. Nao cite nivel deles.")
+    return "\n".join(linhas)
+
+
 def _build_user_prompt(
     noticias: dict,
     estado: dict,
     exposicao: dict,
     data_tag: str,
+    precos: dict | None = None,
 ) -> str:
     """Monta o prompt com todos os dados coletados."""
     partes: list[str] = []
 
     partes.append(f"DATA: {data_tag}")
+    partes.append("")
+
+    partes.append(_bloco_precos(precos or {}))
     partes.append("")
 
     # Noticias
@@ -338,6 +379,7 @@ def main(argv: list[str]) -> int:
     # Carregar dados
     noticias_path = LOG_DIR / f"noticias_{data_tag}.json"
     estado_path = LOG_DIR / f"estado_{data_tag}.json"
+    precos_path = LOG_DIR / f"precos_{data_tag}.json"
     exposicao_path = ROOT / "projetos-exposicao.json"
 
     noticias = _load_json(noticias_path)
@@ -355,8 +397,19 @@ def main(argv: list[str]) -> int:
         print(f"ERRO: {exposicao_path} nao encontrado.", file=sys.stderr)
         return 5
 
+    # Precos nao aborta a geracao: sem cotacao o _bloco_precos manda o modelo
+    # nao citar nivel, e a REGRA 6 do validar_briefing.py reprova se citar.
+    # O aviso fica no log para a falha nao passar em silencio.
+    precos = _load_json(precos_path)
+    if not precos:
+        print(
+            f"AVISO: {precos_path.name} nao encontrado. O briefing sai sem cotacao "
+            "e a REGRA 6 vai reprovar se o modelo citar nivel.",
+            file=sys.stderr,
+        )
+
     # Montar prompt
-    user_prompt = _build_user_prompt(noticias, estado, exposicao, data_tag)
+    user_prompt = _build_user_prompt(noticias, estado, exposicao, data_tag, precos)
 
     # Cadeia de modelos (F05 + F30 corrigidos)
     primary_model = env.get("OPENROUTER_MODEL", DEFAULT_MODEL).strip()

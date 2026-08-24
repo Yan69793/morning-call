@@ -15,34 +15,13 @@ import os
 import sys
 import urllib.error
 import urllib.request
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
-from _comum import load_env
+from _comum import BRT, UA, YAHOO_SYMBOLS, load_env
 
 ROOT = Path(__file__).resolve().parent.parent
 LOG_DIR = ROOT / "logs"
-
-UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-BRT = timezone(timedelta(hours=-3))
-
-# Ativos do Radar Quant que o briefing quer acompanhar
-YAHOO_SYMBOLS = {
-    "IBOV": "^BVSP",
-    "USDBRL": "BRL=X",
-    "SPX": "^GSPC",
-    "VIX": "^VIX",
-    "DXY": "DX-Y.NYB",
-    "GOLD": "GC=F",
-    "WTI": "CL=F",
-    "BTC": "BTC-USD",
-    "PETR4": "PETR4.SA",
-    "VALE3": "VALE3.SA",
-    "ITUB4": "ITUB4.SA",
-    "BBDC4": "BBDC4.SA",
-    "ABEV3": "ABEV3.SA",
-    "WEGE3": "WEGE3.SA",
-}
 
 
 def _load_json(path: Path) -> dict | None:
