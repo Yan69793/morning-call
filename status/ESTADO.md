@@ -157,6 +157,38 @@ o usuário roda `POST /run?date=YYYYMMDD&force=1` (sem `?dry=1`) com a `RUN_TRIG
 decisão de liberar o cron para enviar sozinho (aprovação automática quando a REGRA 6 aprovar)
 fica no colo do Yan — hoje é envio manual.
 
+## Deploy de 2026-08-26 — remote com formatação determinística e paridade de arredondamento
+
+Deploy do `briefing-interno/remote` (`sz-briefing-remote`) em produção, versão
+`950b8183-c579-41da-b533-7799e9effeb4`, a partir de `main` em `db7087e` (paridade de
+arredondamento Python/JS em empates decimais). O deploy leva junto o `161e4c6`
+(formatação determinística de nível e REGRA 6 sem marcador), que ainda não estava no
+Worker.
+
+Validado em produção, sem envio (dry run):
+
+- **Geração**: `POST /run?date=20260825&force=1&dry=1` respondeu `dry_ok` e `complete`,
+  geração na tentativa 1 com `google/gemma-3-27b-it`, 5 URLs aprovadas no pool.
+- **REGRA 6**: artefato `briefing:artefatos:20260825:validacao` no KV = APROVADO, 7
+  mensagens. IBOV 174577 confere (pregao 2026-08-25), SPX 7677.28 confere, USDBRL
+  5.1604 confere (pregao 2026-08-26), zero URLs fora do pool.
+- **Saída final**: HTML gerado com os níveis formatados ("174.577 pontos",
+  "7.677,28 pontos"), zero `174577` cru e zero `.0` cru.
+- **Código novo no ar**: o bundle do Worker contém `roundHalfEvenEscalado` e
+  `getBigUint64`, o round-half-even sobre o double exato, sem `toFixed`.
+- **Logs**: `cron:ultimo:briefing` gravado pelo cron das 07:00 BRT de hoje,
+  `briefing:heartbeat` presente, health responde `kv_bound` e `do_bound`.
+
+Ressalva de observabilidade: o `wrangler kv key get/list` não enxergou as chaves do
+briefing no namespace `SZ_AUTOMATION_KV` (`89432bb...`), mas a API REST mostrou tudo
+(estado, heartbeat, cron e os 5 artefatos do dry run). O CLI do wrangler leu errado,
+não o worker; para conferir KV daqui em diante, a API é a fonte.
+
+Um aviso do validador no dry run: "Nenhum projeto citado no briefing. Pode estar
+incompleto." Ficou como aviso, não reprovou; a chamada direcional (1) e as confianças
+(5) passaram. Observar nos dias reais se o modelo costuma omitir projeto com o bloco
+COTACOES no prompt.
+
 ## Como verificar
 
 Portão do monorepo (antes de declarar qualquer tarefa concluída, colar a saída real):
