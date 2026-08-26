@@ -8,7 +8,11 @@
     { "valor": 7677.28, "decimais": 2, "esperado": "7.677,28" },
     { "valor": 5.4183, "decimais": 4, "esperado": "5,4183" },
     { "valor": 2068.0, "decimais": 2, "esperado": "2.068,00" },
-    { "valor": 14.75, "decimais": 2, "esperado": "14,75" }
+    { "valor": 14.75, "decimais": 2, "esperado": "14,75" },
+    { "nome": "midpoint 0.125 (empate par)", "valor": 0.125, "decimais": 2, "esperado": "0,12" },
+    { "nome": "midpoint 0.625 (empate par)", "valor": 0.625, "decimais": 2, "esperado": "0,62" },
+    { "nome": "midpoint -0.125 (empate par negativo)", "valor": -0.125, "decimais": 2, "esperado": "-0,12" },
+    { "nome": "midpoint 1.125 (empate com carry)", "valor": 1.125, "decimais": 2, "esperado": "1,12" }
   ],
   "niveis": [
     { "ticker": "IBOV", "valor": 174577.0, "esperado": "174.577 pontos" },

@@ -21,10 +21,14 @@ passou a sair formatado ("174.577 pontos", "R$ 5,1490", "14,00% a.a.") e nunca
 mais cru nem com vírgula de milhar ("174,577" seria lido como 1000x menor). A
 paridade é presa por um vetor compartilhado, `remote/tests/fixtures/
 fmt_vectors.json`, que as duas suítes leem (casos-limite 1.005, 2.675, valor
-negativo e valor grande). O `pyRound` do lado JS ficou fora do formatador de
-exibição: multiplicar por 10^d antes do arredondamento introduz erro de float
-a mais (2.675*100 = 267.5 exato no JS, vira 2.68 quando o Python vê 2.6749...).
-O `toFixed` arredonda o mesmo double que o f-string do Python.
+negativo, valor grande e empates de midpoint). O arredondamento do lado JS
+replica o f-string do Python: round-half-even sobre o valor exato do double,
+decomposto em BigInt (N·2^e) com a fração comparada ao meio-termo. O `toFixed`
+do JS não serve, ele empata para cima no meio-termo exato (0.125 vira 0.13, o
+Python emite 0.12), e os vetores de midpoint prendem exatamente essa
+divergência. O `pyRound` ficou fora do formatador de exibição: multiplicar por
+10^d antes de arredondar introduz erro de float a mais (2.675*100 = 267.5
+exato no JS, vira 2.68 quando o Python vê 2.6749...).
 
 **REGRA 6 em três camadas, nos dois validadores.** A camada 1 confere todo
 número do texto que bate com o close, mesmo sem unidade, e fecha a cegueira do

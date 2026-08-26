@@ -135,19 +135,54 @@ function pyStr(v) {
   return String(n);
 }
 
+// roundHalfEvenEscalado: arredonda o valor EXATO do double x para um inteiro
+// de unidades de 10^-dec, com round-half-even (bancario), igual ao f-string
+// do Python. O double e decomposto como N * 2^e (N inteiro, e inteiro) via
+// DataView, e a fracao r/denom e comparada com o meio-termo para decidir o
+// empate. Nao multiplica por 10^d antes de arredondar: isso introduziria uma
+// segunda rodada de erro de float (2.675*100 da 267.5 EXATO no JS) e o
+// resultado divergiria do Python.
+function roundHalfEvenEscalado(x, dec) {
+  const dv = new DataView(new ArrayBuffer(8));
+  dv.setFloat64(0, x);
+  const bits = dv.getBigUint64(0);
+  const expField = (bits >> 52n) & 0x7ffn;
+  const frac = bits & 0xfffffffffffffn;
+  const hidden = expField === 0n ? 0n : 1n;
+  const exp = expField === 0n ? -1074 : Number(expField) - 1075;
+  const N = (hidden << 52n) | frac;
+  const escala = 10n ** BigInt(dec);
+  if (exp >= 0) return N * escala * (1n << BigInt(exp));
+  const denom = 1n << BigInt(-exp);
+  const num = N * escala;
+  const q = num / denom;
+  const r = num % denom;
+  if (r * 2n > denom) return q + 1n;
+  if (r * 2n < denom) return q;
+  return q % 2n === 0n ? q : q + 1n; // empate exato: round-half-even
+}
+
 // fmtNumBR: porta de _fmt_num_br (gerar_briefing.py). Ponto separa milhar,
 // virgula separa decimal, zeros a direita mantidos quando a casa exige.
-// O arredondamento e o toFixed direto, sem pyRound: multiplicar por 10^d
-// antes de arredondar introduce uma segunda rodada de erro de float
-// (2.675*100 da 267.5 EXATO no JS e vira "2.68" no pyRound, quando o Python
-// ve 2.6749999... e emite "2.67"). O toFixed arredonda o MESMO double que o
-// f-string do Python, e os vetores compartilhados fmt_vectors.json prendem a
-// saida identica. Nunca produz virgula de milhar ("174,577").
+// O arredondamento replica o f-string do Python (round-half-even sobre o
+// valor exato do double). O toFixed do JS nao basta: no meio-termo exato ele
+// empata para cima (0.125 vira "0.13" no JS, o Python emite "0.12"), e o
+// roundHalfEvenEscalado acima decide o empate do mesmo jeito que o Python.
+// Os vetores compartilhados fmt_vectors.json prendem a saida identica nos
+// dois. Nunca produz virgula de milhar ("174,577").
 export function fmtNumBR(valor, dec) {
-  const s = Number(valor).toFixed(dec);
-  const [inteiro, resto] = s.split(".");
+  const v = Number(valor);
+  if (!Number.isFinite(v)) return v.toFixed(dec);
+  dec = Math.max(0, Math.trunc(Number(dec) || 0));
+  const neg = v < 0 || Object.is(v, -0);
+  const q = roundHalfEvenEscalado(Math.abs(v), dec);
+  const digits = q.toString().padStart(dec + 1, "0");
+  const inteiro = digits.slice(0, digits.length - dec) || "0";
+  const resto = dec > 0 ? digits.slice(-dec) : "";
   const gru = inteiro.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
-  return resto ? `${gru},${resto}` : gru;
+  let s = resto ? `${gru},${resto}` : gru;
+  if (neg) s = `-${s}`;
+  return s;
 }
 
 // fmtNivel: porta de _fmt_nivel (gerar_briefing.py). display_unit vazio
