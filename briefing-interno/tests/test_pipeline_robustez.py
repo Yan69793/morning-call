@@ -192,11 +192,11 @@ class TestBriefingSemCabecalho(unittest.TestCase):
 
     def test_secoes_viram_cabecalho(self):
         normalizado = enviar_briefing._normalizar_estrutura(self.BRIEFING_21_08)
-        self.assertIn("<h1>RESUMO</h1>", normalizado)
-        self.assertIn("<h1>O QUE IMPORTA HOJE</h1>", normalizado)
-        self.assertIn("<h1>AGENDA DO DIA</h1>", normalizado)
+        self.assertIn("<h2>RESUMO</h2>", normalizado)
+        self.assertIn("<h2>O QUE IMPORTA HOJE</h2>", normalizado)
+        self.assertIn("<h2>AGENDA DO DIA</h2>", normalizado)
         # Ponto numerado nao e linha so-negrito, continua sendo conteudo.
-        self.assertNotIn("<h1>Conselho da Petrobras</h1>", normalizado)
+        self.assertNotIn("<h2>Conselho da Petrobras</h2>", normalizado)
 
     def test_agenda_em_hifen_vira_item(self):
         normalizado = enviar_briefing._normalizar_estrutura(self.BRIEFING_21_08)

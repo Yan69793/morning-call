@@ -159,6 +159,52 @@ class TestRegra6(unittest.TestCase):
         self.assertFalse(problemas, problemas)
         self.assertFalse(oks)
 
+    def test_nivel_sem_marcador_confere_camada_1(self):
+        """O defeito de 26/08: "IBOV +1.55% a 174577.0", numero cru colado do
+        Yahoo sem unidade. A REGRA 6 antiga registrava "nada a conferir". A
+        camada 1 (todo numero que bate confere, mesmo sem marcador) pega o cru
+        e o formato novo "a 174.577".
+        """
+        for frase in (
+            "O Ibovespa subiu 0,41% a 174577.0 no fechamento de ontem.",
+            "O Ibovespa subiu 0,41% a 174.577 no fechamento de ontem.",
+        ):
+            with self.subTest(frase=frase):
+                problemas, oks, _ = _check_numeros_mercado(
+                    f"<p>{frase}</p>", precos(IBOV={"close": 174577.0})
+                )
+                self.assertFalse(problemas, problemas)
+                self.assertEqual(len(oks), 1, frase)
+                self.assertIn("174577", oks[0])
+
+    def test_indice_fora_da_banda_reprova_camada_3(self):
+        """Fabricacao de nivel de indice sem marcador ("a 118.753"): a camada
+        3 reprova. O numero cai em [0.5*close, 1.5*close] e nao bate."""
+        html = "<p>O Ibovespa avancou para 118.753 no fechamento de ontem.</p>"
+        problemas, oks, _ = _check_numeros_mercado(html, precos(IBOV={"close": 174577.0}))
+        self.assertEqual(len(problemas), 1, problemas)
+        self.assertIn("IBOV", problemas[0])
+        self.assertFalse(oks)
+
+    def test_ano_nao_cai_na_banda_e_nao_gera_claim(self):
+        """Sem excecao de ano: com SPX ~7.677 a banda e [3.838, 11.515] e o
+        "2026" nao cai nela. Nao existe caso real que justifique a excecao."""
+        html = "<p>O S&P 500 subiu 12% desde 2026 com o novo ciclo.</p>"
+        problemas, oks, _ = _check_numeros_mercado(
+            html, precos(SPX={"classe": "indice", "close": 7677.28})
+        )
+        self.assertFalse(problemas, problemas)
+        self.assertFalse(oks)
+
+    def test_cambio_sem_marcador_fora_da_tolerancia_fica_silencioso(self):
+        """Limite aceito e documentado: "dolar a 5,00" fabricado sem unidade
+        passa. Cambio nao tem camada 3 (a prosa legitima poe numero
+        incidental perto do close) e a camada 2 exige marcador."""
+        html = "<p>O dolar abriu a 5,00 depois da abertura dos mercados.</p>"
+        problemas, oks, _ = _check_numeros_mercado(html, precos(USDBRL={"close": 5.1714}))
+        self.assertFalse(problemas, problemas)
+        self.assertFalse(oks)
+
     def test_nivel_com_preposicao_ainda_conta(self):
         """A exigencia de preposicao nao pode matar o caso legitimo."""
         for frase in (

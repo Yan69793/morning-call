@@ -1,0 +1,20 @@
+{
+  "decimais": [
+    { "valor": 1.005, "decimais": 2, "esperado": "1,00" },
+    { "valor": 2.675, "decimais": 2, "esperado": "2,67" },
+    { "valor": -2068.0, "decimais": 2, "esperado": "-2.068,00" },
+    { "valor": 1234567.89, "decimais": 2, "esperado": "1.234.567,89" },
+    { "valor": 174577.0, "decimais": 0, "esperado": "174.577" },
+    { "valor": 7677.28, "decimais": 2, "esperado": "7.677,28" },
+    { "valor": 5.4183, "decimais": 4, "esperado": "5,4183" },
+    { "valor": 2068.0, "decimais": 2, "esperado": "2.068,00" },
+    { "valor": 14.75, "decimais": 2, "esperado": "14,75" }
+  ],
+  "niveis": [
+    { "ticker": "IBOV", "valor": 174577.0, "esperado": "174.577 pontos" },
+    { "ticker": "SPX", "valor": 7677.28, "esperado": "7.677,28 pontos" },
+    { "ticker": "USDBRL", "valor": 5.4183, "esperado": "R$ 5,4183" },
+    { "ticker": "SELIC", "valor": 14.75, "esperado": "14,75% a.a." },
+    { "ticker": "GOLD", "valor": 2068.0, "esperado": "US$ 2.068,00" }
+  ]
+}

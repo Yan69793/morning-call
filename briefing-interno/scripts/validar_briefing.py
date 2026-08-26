@@ -298,6 +298,62 @@ def _candidatos_de_nivel(texto: str) -> list[tuple[int, float]]:
     return sorted(achados)
 
 
+# Numero solto no texto, qualquer marcador. Camada 1 da REGRA 6 (conferir sem
+# marcador, corrige 26/08/2026): o briefing saiu com "IBOV +1.55% a 174577.0",
+# numero cru que a antiga _candidatos_de_nivel nao pegava porque so contava
+# nivel com R$/US$/pontos/% a.a., e a REGRA 6 registrou "nada a conferir".
+NUMERO_GENERICO = re.compile(r"[\d][\d.,]*")
+
+
+def _todos_os_numeros(texto: str) -> list[tuple[int, float]]:
+    """Todos os numeros do texto (camada 1 da REGRA 6).
+
+    Diferente de _candidatos_de_nivel, entra numero solto tambem. O uso e SO
+    CONFERIR, nunca reprovar: numero que bate com o close confirma o ativo
+    mesmo sem "R$"/"pontos" na frase, fechando a cegueira do caso de 26/08.
+    Delta de variacao ("caiu 1.200 pontos", "caiu R$ 0,05") sai fora com a
+    mesma exclusao DELTA_ANTES dos candidatos.
+    """
+    achados: list[tuple[int, float]] = []
+    for m in NUMERO_GENERICO.finditer(texto):
+        pos = m.start()
+        if DELTA_ANTES.search(texto[max(0, pos - 30) : pos]):
+            continue
+        v = _parse_num_br(m.group(0))
+        if v is not None:
+            achados.append((pos, v))
+    return achados
+
+
+def _atribui_por_ticker(
+    numeros: list[tuple[int, float]], texto: str, mencoes: list[tuple[int, int, str]]
+) -> dict[str, list[float]]:
+    """Atribui cada numero a UMA mencao, a mais proxima antes dele na frase.
+
+    Extraido do corpo de _check_numeros_mercado em 26/08/2026 porque a REGRA 6
+    passou a rodar duas varreduras (todos os numeros e candidatos de nivel)
+    sobre o mesmo mecanismo de atribuicao. Janela por caractere nao serve: em
+    "o dolar subindo para R$ 5,22 e o Ibovespa ... caindo 1,14%" o R$ 5,22 fica
+    entre as duas mencoes e a janela do Ibovespa o herdava. Caso real do
+    briefing_20260818.html.
+    """
+    por_ticker: dict[str, list[float]] = {}
+    for pos, valor in numeros:
+        frase = next(((a, b) for a, b in _frases(texto) if a <= pos < b), None)
+        if frase is None:
+            continue
+        a, b = frase
+        if PROJECAO_PATTERN.search(texto[a:b]):
+            continue
+        antes = [m for m in mencoes if a <= m[0] < pos]
+        depois = [m for m in mencoes if pos < m[0] < b]
+        dono = antes[-1] if antes else (depois[0] if depois else None)
+        if dono is None:
+            continue
+        por_ticker.setdefault(dono[2], []).append(valor)
+    return por_ticker
+
+
 def _check_numeros_mercado(html: str, precos: dict) -> tuple[list[str], list[str], list[str]]:
     """REGRA 6. Confronta nivel citado no texto com a cotacao real.
 
@@ -307,13 +363,28 @@ def _check_numeros_mercado(html: str, precos: dict) -> tuple[list[str], list[str
     foi 167.830, porque o gerar_briefing.py nao recebia cotacao nenhuma no
     prompt e o modelo preencheu de memoria.
 
-    Criterio, deliberadamente conservador para nao reprovar briefing bom:
+    Criterio, deliberadamente conservador para nao reprovar briefing bom.
+    Tres camadas (26/08/2026, apos o 26/08 sair com numero cru do Yahoo no
+    texto e a REGRA 6 cega):
 
-      - so entra na conta numero com marcador de unidade (R$, US$, pontos);
-      - numero seguido de % e variacao, nao nivel, e vira aviso e nao veto;
-      - ativo citado sem nenhum nivel na janela e ignorado, nao e erro;
-      - ativo com nivel citado onde NENHUM candidato bate a tolerancia
-        reprova, porque ai o briefing afirmou um numero que nao existe.
+      - camada 1, conferir sem marcador: TODO numero do texto (varredura
+        generica, excluindo delta de variacao) que bate com o close confirma
+        o ativo, mesmo sem "R$"/"pontos" na frase. Fecha a cegueira do caso
+        "IBOV +1.55% a 174577.0". Nunca reprova;
+      - camada 2, reprovar por marcador (como antes): nivel com R$/US$/
+        pontos/% a.a. que nao bate reprova. Prende o caso de 20/08
+        (118.753,48 pontos contra fechamento de 167.830);
+      - camada 3, reprovar por banda, so indice/cripto: numero solto dentro
+        de [0.5*close, 1.5*close] que nao bate reprova. Nesses niveis de
+        magnitude numero incidental nao convive com o close, entao "a
+        118.753" sem marcador volta a ser pego. Sem excecao de ano: com SPX
+        ~7.677 a banda e [3.838, 11.515], o "2026" nao cai nela.
+
+    Limitacao conhecida, aceita de proposito: nivel errado SEM unidade em
+    cambio, juro, commodity, volatilidade e acao continua invisivel. A prosa
+    legitima dessas classes poe numero incidental na vizinhanca do close
+    ("3.000 toneladas de ouro", "inflacao em 7%", "caiu R$ 0,05"), reprovar
+    por banda seria falso positivo pior que a cegueira residual.
 
     A comparacao ancora no trade_date do arquivo de precos, que e o pregao
     encerrado, nunca o dia de coleta.
@@ -346,30 +417,29 @@ def _check_numeros_mercado(html: str, precos: dict) -> tuple[list[str], list[str
             mencoes.append((m.start(), m.end(), ticker))
     mencoes.sort()
 
-    # Cada numero pertence a UMA mencao, a mais proxima antes dele dentro da
-    # mesma frase. Janela por caractere nao serve: em "o dolar subindo para
-    # R$ 5,22 e o Ibovespa ... caindo 1,14%" o R$ 5,22 fica entre as duas
-    # mencoes e a janela do Ibovespa o herdava, reprovando um briefing que
-    # nunca afirmou nivel de indice. Caso real do briefing_20260818.html.
-    por_ticker: dict[str, list[float]] = {}
-    for pos, valor in _candidatos_de_nivel(texto):
-        frase = next(((a, b) for a, b in _frases(texto) if a <= pos < b), None)
-        if frase is None:
-            continue
-        a, b = frase
-        if PROJECAO_PATTERN.search(texto[a:b]):
-            continue
-        antes = [m for m in mencoes if a <= m[0] < pos]
-        depois = [m for m in mencoes if pos < m[0] < b]
-        dono = antes[-1] if antes else (depois[0] if depois else None)
-        if dono is None:
-            continue
-        por_ticker.setdefault(dono[2], []).append(valor)
+    # Camada 1: todos os numeros conferem (so ok). Camadas 2/3: candidatos de
+    # nivel com marcador, mais os numeros em banda de indice/cripto, reprovam.
+    todos_por_ticker = _atribui_por_ticker(_todos_os_numeros(texto), texto, mencoes)
+    claims_por_ticker = _atribui_por_ticker(_candidatos_de_nivel(texto), texto, mencoes)
 
-    # Decisao por ativo. Um ativo citado corretamente em algum ponto do texto
-    # esta conferido, e o portao so reprova quando NENHUM numero atribuido a
-    # ele bate com a cotacao.
-    for ticker in sorted(por_ticker):
+    # Camada 3: numero em banda de magnitude vira claim de nivel para
+    # indice/cripto. A faixa e do ticker DONO (a atribuicao ja rodou), entao
+    # um numero na banda do Ibovespa atribuido ao SPX nao vira claim do SPX.
+    for ticker, dado in ativos.items():
+        meta = ATIVOS_META.get(ticker, {})
+        classe = dado.get("classe") or meta.get("classe") or ""
+        close = dado.get("close")
+        if classe not in ("indice", "cripto") or not close:
+            continue
+        ini, fim = close * 0.5, close * 1.5
+        for v in todos_por_ticker.get(ticker, []):
+            if ini <= v <= fim:
+                claims_por_ticker.setdefault(ticker, []).append(v)
+
+    # Decisao por ativo. Um numero que bate confere (camada 1 ou 2). Claim que
+    # nao bate reprova (camadas 2 e 3). Ativo sem claim e sem numero que bate
+    # fica em silencio: nao afirmou nivel, nao ha o que conferir.
+    for ticker in sorted(set(todos_por_ticker) | set(claims_por_ticker)):
         dado = ativos[ticker]
         close = dado.get("close")
         trade_date = dado.get("trade_date")
@@ -390,25 +460,29 @@ def _check_numeros_mercado(html: str, precos: dict) -> tuple[list[str], list[str
         meta = ATIVOS_META.get(ticker, {})
         tolerancia = dado.get("tolerancia") or meta.get("tolerancia") or 1.0
         unidade = dado.get("unidade") or meta.get("unidade") or "pct"
-        candidatos = por_ticker[ticker]
+        todos = todos_por_ticker.get(ticker, [])
+        claims = claims_por_ticker.get(ticker, [])
 
         if unidade == "bp":
-            bate = [v for v in candidatos if abs(v - close) * 100 <= tolerancia]
+            def bate(v: float) -> bool:
+                return abs(v - close) * 100 <= tolerancia
             desc_tol = f"{tolerancia:g} bp"
         else:
-            bate = [
-                v for v in candidatos
-                if close and abs(v - close) / abs(close) * 100 <= tolerancia
-            ]
+            def bate(v: float) -> bool:
+                return close and abs(v - close) / abs(close) * 100 <= tolerancia
             desc_tol = f"{tolerancia:g}%"
 
-        if bate:
+        bate_claims = [v for v in claims if bate(v)]
+        bate_geral = [v for v in todos if bate(v)]
+        escolhido = bate_claims[0] if bate_claims else (bate_geral[0] if bate_geral else None)
+
+        if escolhido is not None:
             oks.append(
-                f"{ticker}: {bate[0]:g} confere com {close:g} "
+                f"{ticker}: {escolhido:g} confere com {close:g} "
                 f"(pregao {trade_date}, tolerancia {desc_tol})"
             )
-        else:
-            citados = ", ".join(f"{v:g}" for v in candidatos[:4])
+        elif claims:
+            citados = ", ".join(f"{v:g}" for v in claims[:4])
             problemas.append(
                 f"REGRA 6: {ticker} citado como {citados} mas o fechamento de "
                 f"{trade_date} foi {close:g} (tolerancia {desc_tol}, fonte "

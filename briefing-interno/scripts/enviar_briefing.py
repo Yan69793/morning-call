@@ -229,7 +229,7 @@ def _section_header_row(titulo):
         'cellpadding="0" border="0">'
         f"<tr>{marker}"
         '<td style="font-family:Georgia,\'Times New Roman\',Times,serif;'
-        'font-size:15px;font-weight:bold;color:#0a1428;line-height:22px;'
+        'font-size:16px;font-weight:bold;color:#0a1428;line-height:24px;'
         'border-bottom:1px solid #92703a;padding-bottom:8px;">'
         f"{t}</td></tr></table></td></tr>"
     )
@@ -251,7 +251,7 @@ def _paragraph_row(segments):
     return (
         '<tr><td style="padding:12px 32px 2px;'
         "font-family:Georgia,'Times New Roman',Times,serif;"
-        "font-size:14px;color:#1a2030;line-height:24px;"
+        "font-size:15px;color:#1a2030;line-height:26px;"
         f'mso-line-height-rule:exactly;">{inner}</td></tr>'
     )
 
@@ -282,10 +282,10 @@ def _numbered_row(numero, segments):
     return (
         '<tr><td style="padding:8px 32px 2px;'
         "font-family:Georgia,'Times New Roman',Times,serif;"
-        "font-size:14px;color:#1a2030;line-height:24px;"
+        "font-size:15px;color:#1a2030;line-height:26px;"
         'mso-line-height-rule:exactly;">'
         f'<span style="font-family:\'Courier New\',Courier,monospace;'
-        f'font-size:11px;color:#92703a;">{numero}.</span>&nbsp;{inner}'
+        f'font-size:12px;color:#92703a;">{numero}.</span>&nbsp;{inner}'
         "</td></tr>"
     )
 
@@ -318,7 +318,7 @@ def _bullet_row(segments):
     return (
         '<tr><td style="padding:6px 32px;'
         "font-family:Georgia,'Times New Roman',Times,serif;"
-        "font-size:14px;color:#1a2030;line-height:24px;"
+        "font-size:15px;color:#1a2030;line-height:26px;"
         f'mso-line-height-rule:exactly;">'
         f'<span style="color:#92703a;">&bull;</span>&nbsp;{inner}</td></tr>'
     )
@@ -362,7 +362,7 @@ def _normalizar_estrutura(html_content: str) -> str:
         if not tem_cabecalho:
             m = _LINHA_SO_BOLD_RE.match(linha)
             if m:
-                saida.append(f"<h1>{m.group(1)}</h1>")
+                saida.append(f"<h2>{m.group(1)}</h2>")
                 continue
         if not tem_item:
             m = _LINHA_TRACO_RE.match(linha) or _LINHA_NUMERO_RE.match(linha)
@@ -425,7 +425,7 @@ def _montar_corpo(html_content: str) -> str:
     # parse. So o e-mail muda; o arquivo em disco mantem as fontes, o
     # validador segue trabalhando sobre o conteudo puro.
     m = re.search(
-        r"<h1>O QUE IMPORTA HOJE</h1>(.*?)(?=<h1>|$)",
+        r"<h[12]>O QUE IMPORTA HOJE</h[12]>(.*?)(?=<h[12]>|$)",
         html_content,
         flags=re.DOTALL | re.IGNORECASE,
     )
@@ -491,7 +491,7 @@ def build_styled_email(html_content: str, data_fmt: str) -> str:
   <tr><td style="padding:0;">
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#0a1428" style="background-color:#0a1428;">
       <tr><td height="3" bgcolor="#92703a" style="height:3px;line-height:3px;font-size:3px;background-color:#92703a;">&nbsp;</td></tr>
-      <tr><td style="padding:24px 32px 4px;">
+      <tr><td style="padding:28px 32px 8px;">
         <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
           <tr>
             <td width="48" valign="middle" style="width:48px;padding-right:14px;">
@@ -506,11 +506,15 @@ def build_styled_email(html_content: str, data_fmt: str) -> str:
           </tr>
         </table>
       </td></tr>
-      <tr><td style="padding:6px 32px 6px 62px;font-family:'Courier New',Courier,monospace;font-size:10px;color:#b8925a;line-height:14px;mso-line-height-rule:exactly;">
-        PANORAMA DIARIO
-      </td></tr>
-      <tr><td style="padding:0 32px 24px;font-family:Georgia,'Times New Roman',Times,serif;font-size:15px;font-style:italic;color:#d8d8d8;line-height:23px;mso-line-height-rule:exactly;">
-        O essencial dos mercados para começar o dia
+      <tr><td style="padding:4px 32px 20px;">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+          <tr><td style="font-family:'Courier New',Courier,monospace;font-size:10px;color:#b8925a;line-height:14px;mso-line-height-rule:exactly;padding-bottom:6px;">
+            PANORAMA DIARIO
+          </td></tr>
+          <tr><td style="font-family:Georgia,'Times New Roman',Times,serif;font-size:15px;font-style:italic;color:#d8d8d8;line-height:23px;mso-line-height-rule:exactly;">
+            O essencial dos mercados para começar o dia
+          </td></tr>
+        </table>
       </td></tr>
       <tr><td height="1" bgcolor="#92703a" style="height:1px;line-height:1px;font-size:1px;background-color:#92703a;opacity:0.35;">&nbsp;</td></tr>
     </table>
@@ -523,7 +527,7 @@ def build_styled_email(html_content: str, data_fmt: str) -> str:
   <tr><td style="padding:28px 32px 0;">
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-top:1px solid #d8dce3;">
       <tr><td align="center" style="padding-top:18px;padding-bottom:24px;">
-        <span style="font-family:'Courier New',Courier,monospace;font-size:10px;color:#92703a;line-height:14px;">szuchmacher.com.br</span>
+        <a href="https://szuchmacher.com.br" target="_blank" style="font-family:'Courier New',Courier,monospace;font-size:10px;color:#92703a;text-decoration:none;line-height:14px;">szuchmacher.com.br</a>
         <br>
         <span style="font-family:Georgia,'Times New Roman',Times,serif;font-size:10px;color:#5a6272;line-height:15px;">Material informativo, n&atilde;o constitui recomenda&ccedil;&atilde;o de investimento</span>
       </td></tr>

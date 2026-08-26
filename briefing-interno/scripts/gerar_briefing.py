@@ -19,6 +19,9 @@ import urllib.request
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
+from _comum import ATIVOS_META
+from _sanitizar_briefing import sanitizar_conteudo
+
 ROOT = Path(__file__).resolve().parent.parent
 LOG_DIR = ROOT / "logs"
 OUTPUT_DIR = ROOT / "outputs"
@@ -50,10 +53,22 @@ REGRAS ABSOLUTAS:
    NUNCA cite Morning Call nem Radar Quant como projetos: em 13/08 o Yan tirou
    as secoes de dados dos dois do briefing, e a leitura por projeto deles tambem saiu.
 4. Briefing sem nenhuma chamada direcional e invalido. Encontre pelo menos uma leitura relevante.
+5. Todo nivel de mercado citado PRECISA sair com o numero EXATO, a unidade e
+   as casas da tabela COTACOES do prompt ("a 174.577 pontos", "R$ 5,1625",
+   "US$ 82,36", "14,00% a.a."). NUNCA copie o numero cru com ponto decimal
+   ("174577.0"), nunca cite nivel sem unidade e nunca use virgula como
+   separador de milhar ("174,577" e 1000x menor e reprova o briefing).
 
 FORMATO DO BRIEFING (HTML):
-- Estrutura limpa, sem CSS externo, self-contained.
-- Formato dos bancos globais (pesquisado em 13/08 no Deutsche Bank, Bloomberg e
+- Gere apenas o MIDLO do briefing, em HTML minimo de conteudo, SEM casca de
+  documento. Nao use <html>, <head>, <body>, <style>, <script>, comentario,
+  doctype, tabela ou qualquer atributo de apresentacao (style, class, id).
+- Use apenas estas tags estruturais: <h2> para titulo de secao,
+  <p> para paragrafo, <li> para item de lista, <b> para enfase, <a> para link
+  de fonte. NAO use <h1>: o <h1> e reservado ao cabecalho do e-mail. Nao
+  invente <h1> nem outro nivel de cabecalho.
+- Estrutura limpa, self-contained no conteudo. Formato dos bancos globais
+  (pesquisado em 13/08 no Deutsche Bank, Bloomberg e
   Goldman): poucos blocos, cada um com titulo em negrito, 2-3 frases densas em
   numero exato com comparacao historica ("melhor semana desde 2008"), e a ultima
   frase diz por que importa para o mercado. Sem lista de recomendacao, sem secao
@@ -138,6 +153,39 @@ def _bloco_agenda(data_tag: str) -> str:
     return "=== AGENDA DO DIA (dados oficiais, use SOMENTE estes eventos) ===\n" + "\n".join(linhas)
 
 
+def _fmt_num_br(valor: float, dec: int) -> str:
+    """Formata numero no padrao BR com casas fixas, sem locale nem Intl.
+
+    Ponto separa milhar, virgula separa decimal, zeros a direita mantidos
+    quando a casa exige ("2.068,00"). Nunca produz virgula de milhar
+    ("174,577"): o _parse_num_br do validador leria 174.577, 1000x menor.
+    A porta JS em remote/src/generate/briefing.js e byte a byte a mesma, e o
+    vetor compartilhado fmt_vectors.json trava os dois na saida identica.
+    """
+    inteiro, sep, resto = f"{valor:,.{dec}f}".partition(".")
+    inteiro = inteiro.replace(",", ".")
+    return f"{inteiro},{resto}" if resto else inteiro
+
+
+def _fmt_nivel(ticker: str, valor: float) -> str:
+    """Nivel formatado para exibicao: numero + unidade por ativo.
+
+    display_unit vazio (default de ativo desconhecido) devolve so o numero.
+    Unidade de moeda vem antes do valor ("R$ 5,1625"), as demais depois
+    ("174.577 pontos", "14,00% a.a.").
+    """
+    meta = ATIVOS_META.get(ticker, {})
+    unit = meta.get("display_unit", "")
+    base = _fmt_num_br(valor, meta.get("display_decimals", 0))
+    if not unit:
+        return base
+    if unit in ("R$", "US$"):
+        return f"{unit} {base}"
+    if unit.startswith("%"):
+        return f"{base}{unit}"  # "% a.a." cola no numero: "14,75% a.a."
+    return f"{base} {unit}"
+
+
 def _bloco_precos(precos: dict) -> str:
     """Cotacao de fechamento para o prompt. Sempre, nao so em fallback.
 
@@ -146,6 +194,10 @@ def _bloco_precos(precos: dict) -> str:
     de 2 dias. Nos outros dias o prompt nao trazia cotacao nenhuma e o modelo
     escrevia o nivel de memoria: o briefing de 20/08 saiu com Ibovespa em
     118.753,48 quando o fechamento de 19/08 foi 167.830.
+
+    Em 26/08/2026 o close cru do Yahoo (174577.0) passou a ser formatado aqui
+    (_fmt_nivel): o modelo copia literal o que le, e numero cru vira aberracao
+    no briefing.
     """
     ativos = (precos or {}).get("ativos", {})
     if not ativos:
@@ -157,16 +209,22 @@ def _bloco_precos(precos: dict) -> str:
 
     linhas = ["=== COTACOES (fechamento do ultimo pregao encerrado) ==="]
     linhas.append(
-        "Use EXATAMENTE estes numeros ao citar nivel de mercado. Nao arredonde "
-        "para valor diferente, nao complete de memoria, nao cite ativo que nao "
-        "esteja nesta lista. O portao de validacao confere cada nivel citado "
-        "contra esta tabela e reprova o briefing fora da tolerancia."
+        "Use EXATAMENTE estes numeros ao citar nivel de mercado, no formato da "
+        "tabela (unidade e casas ja aplicadas, ex.: '174.577 pontos', "
+        "'R$ 5,1625', 'US$ 82,36', '14,00% a.a.'). Nao arredonde para valor "
+        "diferente, nao complete de memoria, nao cite ativo que nao esteja "
+        "nesta lista. Nunca use numero cru ('174577.0') nem virgula de milhar "
+        "('174,577', que e 1000x menor). O portao de validacao confere cada "
+        "nivel citado contra esta tabela e reprova o briefing fora da "
+        "tolerancia."
     )
     for ticker, d in ativos.items():
         var = d.get("change_percent")
         var_txt = f", var {var:+.2f}%" if isinstance(var, (int, float)) else ""
+        close = d.get("close")
+        nivel = _fmt_nivel(ticker, close) if isinstance(close, (int, float)) else "n/d"
         linhas.append(
-            f"  {ticker}: {d.get('close')} (pregao {d.get('trade_date')}{var_txt}) "
+            f"  {ticker}: {nivel} (pregao {d.get('trade_date')}{var_txt}) "
             f"[{d.get('fonte', 'n/d')}]"
         )
     erros = (precos or {}).get("erros") or []
@@ -467,6 +525,15 @@ def main(argv: list[str]) -> int:
 
     if html is None or model_used is None:
         print("REPROVADO: todos os modelos falharam. Envio abortado.", file=sys.stderr)
+        return 9
+
+    # Sanitiza o conteudo antes de gravar: o LLM e a unica parte
+    # nao-deterministica e pode desobedecer o prompt. O layout final e do
+    # sistema (enviar_briefing.py), entao aqui so importa conteudo estrutural
+    # seguro: h2/p/li/b/a, sem estilo/script/atributo perigoso, h1->h2.
+    html = sanitizar_conteudo(html)
+    if not html or len(html.strip()) < 200:
+        print("REPROVADO: conteudo vazio apos sanitizacao. Envio abortado.", file=sys.stderr)
         return 9
 
     # Salvar

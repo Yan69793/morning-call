@@ -10,9 +10,14 @@
 //
 // scheduled(): mesmo handler do /run e do /watchdog (uma funcao, dois gatilhos).
 // Crons em UTC (BRT = UTC-3 fixo):
-//   5 10 * * 1-5  -> 07:05 BRT  run
-//   35 10 * * 1-5 -> 07:35 BRT  retry unico de falha remota
-//   40 10 * * 1-5 -> 07:40 BRT  watchdog
+//   0  10 * * 1-5  -> 07:00 BRT  run (local primario as 06:55; remote seguro)
+//   35 10 * * 1-5  -> 07:35 BRT  retry unico de falha remota
+//   40 10 * * 1-5  -> 07:40 BRT  watchdog
+//
+// O cron roda SEMPRE em dry (nunca envia). O envio real exige /run manual sem
+// ?dry=1 (RUN_TRIGGER_KEY humana), e o watchdog alerta que o briefing esta
+// pronto. REGRA 6 em producao desde o deploy v ad24c1bc—sem numeros conferidos
+// nao ha envio (fail-closed).
 
 import { PipelineStateDO } from "./state-do.js";
 import { runPipeline } from "./run.js";
@@ -20,7 +25,7 @@ import { watchdog } from "./watchdog.js";
 import { brtToday } from "./agenda.js";
 import { getCronUltimo, getWatchdogUltimo } from "./kv.js";
 
-const CRON_RUN = "5 10 * * 1-5";
+const CRON_RUN = "0 10 * * 1-5";
 const CRON_RETRY = "35 10 * * 1-5";
 const CRON_WATCHDOG = "40 10 * * 1-5";
 

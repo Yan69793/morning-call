@@ -231,7 +231,7 @@ function sectionHeaderRow(titulo) {
     'cellpadding="0" border="0">' +
     `<tr>${marker}` +
     "<td style=\"font-family:Georgia,'Times New Roman',Times,serif;" +
-    "font-size:15px;font-weight:bold;color:#0a1428;line-height:22px;" +
+    "font-size:16px;font-weight:bold;color:#0a1428;line-height:24px;" +
     'border-bottom:1px solid #92703a;padding-bottom:8px;">' +
     `${t}</td></tr></table></td></tr>`
   );
@@ -255,7 +255,7 @@ function paragraphRow(segments) {
   return (
     '<tr><td style="padding:12px 32px 2px;' +
     "font-family:Georgia,'Times New Roman',Times,serif;" +
-    "font-size:14px;color:#1a2030;line-height:24px;" +
+    "font-size:15px;color:#1a2030;line-height:26px;" +
     `mso-line-height-rule:exactly;">${inner}</td></tr>`
   );
 }
@@ -289,10 +289,10 @@ function numberedRow(numero, segments) {
   return (
     '<tr><td style="padding:8px 32px 2px;' +
     "font-family:Georgia,'Times New Roman',Times,serif;" +
-    "font-size:14px;color:#1a2030;line-height:24px;" +
+    "font-size:15px;color:#1a2030;line-height:26px;" +
     'mso-line-height-rule:exactly;">' +
     "<span style=\"font-family:'Courier New',Courier,monospace;" +
-    `font-size:11px;color:#92703a;">${numero}.</span>&nbsp;${inner}` +
+    `font-size:12px;color:#92703a;">${numero}.</span>&nbsp;${inner}` +
     "</td></tr>"
   );
 }
@@ -302,15 +302,60 @@ function bulletRow(segments) {
   return (
     '<tr><td style="padding:6px 32px;' +
     "font-family:Georgia,'Times New Roman',Times,serif;" +
-    "font-size:14px;color:#1a2030;line-height:24px;" +
+    "font-size:15px;color:#1a2030;line-height:26px;" +
     'mso-line-height-rule:exactly;">' +
     `<span style="color:#92703a;">&bull;</span>&nbsp;${inner}</td></tr>`
   );
 }
 
+// Porta de _normalizar_estrutura (enviar_briefing.py): converte briefing sem
+// <h1>/<h2>/<li> para a forma canonica. O parsa do e-mail so abre secao ao
+// ver <h1>/<h2>, e o corte de fonte abaixo depende do cabecalho da secao.
+// Idempotente: documento que ja traz cabecalho e item sai inalterado.
+const LINHA_SO_BOLD = /^\s*<b>\s*(.+?)\s*<\/b>\s*$/i;
+const LINHA_TRACO = /^\s*-\s+(.*\S)\s*$/;
+const LINHA_NUMERO = /^\s*\d+[.)]\s+(.*\S)\s*$/;
+
+function normalizarEstrutura(htmlContent) {
+  const temCabecalho = /<h[12][\s>]/i.test(htmlContent);
+  const temItem = /<li[\s>]/i.test(htmlContent);
+  if (temCabecalho && temItem) return htmlContent;
+  const saida = [];
+  for (const linha of htmlContent.split("\n")) {
+    if (!temCabecalho) {
+      const m = LINHA_SO_BOLD.exec(linha);
+      if (m) {
+        saida.push(`<h2>${m[1]}</h2>`);
+        continue;
+      }
+    }
+    if (!temItem) {
+      const m = LINHA_TRACO.exec(linha) || LINHA_NUMERO.exec(linha);
+      if (m) {
+        saida.push(`<li>${m[1]}</li>`);
+        continue;
+      }
+    }
+    saida.push(linha);
+  }
+  return saida.join("\n");
+}
+
 // buildStyledEmail: porta byte a byte de build_styled_email (template hero,
 // corpo e rodape da paleta do relatorio diario).
 export function buildStyledEmail(htmlContent, dataFmt) {
+  // Mesmo pre-processo do Python (_montar_corpo): normaliza a estrutura e
+  // remove a ancoras <a>...</a> da secao O QUE IMPORTA HOJE (decisao do Yan).
+  // Flag "s" = dotAll, como o re.DOTALL do Python: o conteudo da secao tem
+  // quebras de linha e o lookahead para o fim da secao precisa atravessa-las.
+  htmlContent = normalizarEstrutura(htmlContent);
+  const corteH = /<h[12]>O QUE IMPORTA HOJE<\/h[12]>([\s\S]*?)(?=<h[12]>|$)/i;
+  const mCorte = corteH.exec(htmlContent);
+  if (mCorte) {
+    const seg = mCorte[1].replace(/<a\b[^>]*>.*?<\/a>/gi, "");
+    htmlContent = htmlContent.slice(0, mCorte.index + mCorte[0].length - mCorte[1].length) + seg + htmlContent.slice(mCorte.index + mCorte[0].length);
+  }
+
   const parser = new BriefingContent();
   parser.feed(htmlContent);
 
@@ -359,7 +404,7 @@ export function buildStyledEmail(htmlContent, dataFmt) {
   <tr><td style="padding:0;">
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#0a1428" style="background-color:#0a1428;">
       <tr><td height="3" bgcolor="#92703a" style="height:3px;line-height:3px;font-size:3px;background-color:#92703a;">&nbsp;</td></tr>
-      <tr><td style="padding:24px 32px 4px;">
+      <tr><td style="padding:28px 32px 8px;">
         <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
           <tr>
             <td width="48" valign="middle" style="width:48px;padding-right:14px;">
@@ -374,11 +419,15 @@ export function buildStyledEmail(htmlContent, dataFmt) {
           </tr>
         </table>
       </td></tr>
-      <tr><td style="padding:6px 32px 6px 62px;font-family:'Courier New',Courier,monospace;font-size:10px;color:#b8925a;line-height:14px;mso-line-height-rule:exactly;">
-        PANORAMA DIARIO
-      </td></tr>
-      <tr><td style="padding:0 32px 24px;font-family:Georgia,'Times New Roman',Times,serif;font-size:15px;font-style:italic;color:#d8d8d8;line-height:23px;mso-line-height-rule:exactly;">
-        O essencial dos mercados para começar o dia
+      <tr><td style="padding:4px 32px 20px;">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+          <tr><td style="font-family:'Courier New',Courier,monospace;font-size:10px;color:#b8925a;line-height:14px;mso-line-height-rule:exactly;padding-bottom:6px;">
+            PANORAMA DIARIO
+          </td></tr>
+          <tr><td style="font-family:Georgia,'Times New Roman',Times,serif;font-size:15px;font-style:italic;color:#d8d8d8;line-height:23px;mso-line-height-rule:exactly;">
+            O essencial dos mercados para começar o dia
+          </td></tr>
+        </table>
       </td></tr>
       <tr><td height="1" bgcolor="#92703a" style="height:1px;line-height:1px;font-size:1px;background-color:#92703a;opacity:0.35;">&nbsp;</td></tr>
     </table>
@@ -391,7 +440,7 @@ ${corpo}
   <tr><td style="padding:28px 32px 0;">
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-top:1px solid #d8dce3;">
       <tr><td align="center" style="padding-top:18px;padding-bottom:24px;">
-        <span style="font-family:'Courier New',Courier,monospace;font-size:10px;color:#92703a;line-height:14px;">szuchmacher.com.br</span>
+        <a href="https://szuchmacher.com.br" target="_blank" style="font-family:'Courier New',Courier,monospace;font-size:10px;color:#92703a;text-decoration:none;line-height:14px;">szuchmacher.com.br</a>
         <br>
         <span style="font-family:Georgia,'Times New Roman',Times,serif;font-size:10px;color:#5a6272;line-height:15px;">Material informativo, n&atilde;o constitui recomenda&ccedil;&atilde;o de investimento</span>
       </td></tr>

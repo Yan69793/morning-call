@@ -49,29 +49,52 @@ YAHOO_SYMBOLS = {
 # Valores iniciais de 24/08/2026, calibraveis quando houver serie real.
 # Nao havia convencao de unidade herdavel no projeto: docs/DATA_SOURCES.md
 # lista endpoints mas nao define tolerancia nem unidade de comparacao.
+#
+# display_unit e display_decimals (26/08/2026): a precisao de EXIBICAO por
+# ativo, usada pelo gerar_briefing para formatar o nivel no bloco COTACOES.
+# O close cru do Yahoo (174577.0) nao deve chegar ao prompt nem ao texto:
+# o modelo copia literal, e numero cru vira aberracao no briefing. O valor e
+# formatado com casas fixas, ponto de milhar e virgula de decimal, sem locale
+# nem Intl (paridade Python/JS exata). display_unit vazio significa numero
+# sem unidade.
 ATIVOS_META = {
-    "IBOV": {"classe": "indice", "unidade": "pct", "tolerancia": 0.5},
-    "SPX": {"classe": "indice", "unidade": "pct", "tolerancia": 0.5},
-    "USDBRL": {"classe": "cambio", "unidade": "pct", "tolerancia": 1.0},
-    "DXY": {"classe": "cambio", "unidade": "pct", "tolerancia": 1.0},
-    "VIX": {"classe": "volatilidade", "unidade": "pct", "tolerancia": 2.0},
-    "GOLD": {"classe": "commodity", "unidade": "pct", "tolerancia": 0.5},
-    "WTI": {"classe": "commodity", "unidade": "pct", "tolerancia": 0.5},
-    "BTC": {"classe": "cripto", "unidade": "pct", "tolerancia": 1.5},
-    "PETR4": {"classe": "acao", "unidade": "pct", "tolerancia": 0.5},
-    "VALE3": {"classe": "acao", "unidade": "pct", "tolerancia": 0.5},
-    "ITUB4": {"classe": "acao", "unidade": "pct", "tolerancia": 0.5},
-    "BBDC4": {"classe": "acao", "unidade": "pct", "tolerancia": 0.5},
-    "ABEV3": {"classe": "acao", "unidade": "pct", "tolerancia": 0.5},
-    "WEGE3": {"classe": "acao", "unidade": "pct", "tolerancia": 0.5},
-    "SELIC": {"classe": "juro", "unidade": "bp", "tolerancia": 5.0},
+    "IBOV": {"classe": "indice", "unidade": "pct", "tolerancia": 0.5,
+             "display_unit": "pontos", "display_decimals": 0},
+    "SPX": {"classe": "indice", "unidade": "pct", "tolerancia": 0.5,
+            "display_unit": "pontos", "display_decimals": 2},
+    "USDBRL": {"classe": "cambio", "unidade": "pct", "tolerancia": 1.0,
+               "display_unit": "R$", "display_decimals": 4},
+    "DXY": {"classe": "cambio", "unidade": "pct", "tolerancia": 1.0,
+            "display_unit": "pontos", "display_decimals": 2},
+    "VIX": {"classe": "volatilidade", "unidade": "pct", "tolerancia": 2.0,
+            "display_unit": "pontos", "display_decimals": 2},
+    "GOLD": {"classe": "commodity", "unidade": "pct", "tolerancia": 0.5,
+             "display_unit": "US$", "display_decimals": 2},
+    "WTI": {"classe": "commodity", "unidade": "pct", "tolerancia": 0.5,
+            "display_unit": "US$", "display_decimals": 2},
+    "BTC": {"classe": "cripto", "unidade": "pct", "tolerancia": 1.5,
+            "display_unit": "US$", "display_decimals": 2},
+    "PETR4": {"classe": "acao", "unidade": "pct", "tolerancia": 0.5,
+              "display_unit": "R$", "display_decimals": 2},
+    "VALE3": {"classe": "acao", "unidade": "pct", "tolerancia": 0.5,
+              "display_unit": "R$", "display_decimals": 2},
+    "ITUB4": {"classe": "acao", "unidade": "pct", "tolerancia": 0.5,
+              "display_unit": "R$", "display_decimals": 2},
+    "BBDC4": {"classe": "acao", "unidade": "pct", "tolerancia": 0.5,
+              "display_unit": "R$", "display_decimals": 2},
+    "ABEV3": {"classe": "acao", "unidade": "pct", "tolerancia": 0.5,
+              "display_unit": "R$", "display_decimals": 2},
+    "WEGE3": {"classe": "acao", "unidade": "pct", "tolerancia": 0.5,
+              "display_unit": "R$", "display_decimals": 2},
+    "SELIC": {"classe": "juro", "unidade": "bp", "tolerancia": 5.0,
+              "display_unit": "% a.a.", "display_decimals": 2},
 }
 
 # Como o ativo aparece escrito no briefing. Usado pela REGRA 6 para localizar
 # o numero no texto. Minusculo, sem acento: o casamento normaliza os dois lados.
 ATIVOS_ALIASES = {
     "IBOV": ["ibovespa", "ibov"],
-    "SPX": ["s&p 500", "s&p500", "sp500", "standard & poor"],
+    "SPX": ["s&p 500", "s&p500", "sp500", "standard & poor", "spx"],
     # "cambio", "vale" e "petroleo" sozinhos ficaram de fora de proposito:
     # casam com texto comum ("vale a pena", "politica cambial") e trariam o
     # numero da frase errada para dentro da janela do ativo.

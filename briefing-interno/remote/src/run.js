@@ -15,6 +15,7 @@ import {
 import { diaUtilInfo } from "./holidays.js";
 import { coletarNoticias } from "./collect/noticias.js";
 import { coletarEstado } from "./collect/estado.js";
+import { coletarPrecos } from "./collect/precos.js";
 import {
   SYSTEM_PROMPT,
   buildUserPrompt,
@@ -144,6 +145,28 @@ export async function runPipeline({
     await putArtefato(env, pipeline, date, "estado", estado);
     await beat("coleta_estado");
 
+    // ------------------------------------------------------------ PASSO 2.2
+    // Cotacao de fechamento (implementacao local do coletar_precos.py). Sem
+    // ao menos um ativo o portao numerico (REGRA 6) ficaria cego, e cego e
+    // pior que travado: preferimos abortar antes de gastar chamada de LLM. O
+    // artefato e gravado ANTES do abort para o retry das 07:35 ter a visao
+    // de que a coleta trouxe 0 ativos (mesmo fail-closed do local, exit != 0).
+    const precos = await coletarPrecos({ dateTag: date, fetchImpl, nowMs: now });
+    await putArtefato(env, pipeline, date, "precos", precos);
+    if (!precos.ativos || !Object.keys(precos.ativos).length) {
+      await finish({
+        status: "failed",
+        validation_status: "reprovado",
+        tentativas_aprovacao: 0,
+        error_code: "PRECOS_VAZIOS",
+        error_summary: `coletar_precos trouxe ${(precos.erros || []).length} erro(s) e 0 ativos; portao numerico ficaria cego`,
+        sem_regra6: true,
+      });
+      await beat("precos_vazios", { n_erros: (precos.erros || []).length });
+      return { pipeline, date, run_id: runId, status: "failed", error_code: "PRECOS_VAZIOS" };
+    }
+    await beat("coleta_precos", { n_ativos: Object.keys(precos.ativos).length, erros: precos.erros.length });
+
     // ------------------------------------------------------------ AGENDA
     const hojeIso = `${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6, 8)}`;
     const [ini, fim] = janelaSegSex(hojeIso);
@@ -170,8 +193,8 @@ export async function runPipeline({
     await beat("agenda", { agenda_status: agendaStatus, n_eventos: agendaPayload.eventos.length });
 
     // ------------------------------------------- PASSOS 3+4 (3 tentativas)
-    const models = [env.OPENROUTER_MODEL || "google/gemma-3-27b-it"];
-    if (env.OPENROUTER_FALLBACK_MODEL) models.push(env.OPENROUTER_FALLBACK_MODEL);
+    const primaryModel = env.OPENROUTER_MODEL || "google/gemma-3-27b-it";
+    const fallbackModel = env.OPENROUTER_FALLBACK_MODEL || "";
     const userPrompt = buildUserPrompt(
       noticias.payload,
       estado,
@@ -179,6 +202,7 @@ export async function runPipeline({
       date,
       agendaPayload,
       agendaStatus,
+      precos,
     );
 
     let html = null;
@@ -186,6 +210,14 @@ export async function runPipeline({
     let validacaoLog = null;
     for (let tentativa = 1; tentativa <= MAX_TENTATIVAS; tentativa++) {
       await beat(`geracao_t${tentativa}`);
+      // MODELVAR1 (porta de 21/08/2026): a partir da tentativa 2, inverter a
+      // ordem da cadeia. As 3 tentativas de 20/08 foram o mesmo modelo com o
+      // mesmo prompt e o portao reprovou as 3 (falha correlacionada). Inverter
+      // nao afrouxa o portao, so explora primeiro o modelo que ainda nao jogou.
+      const models =
+        fallbackModel && tentativa >= 2
+          ? [fallbackModel, primaryModel]
+          : [primaryModel, ...(fallbackModel ? [fallbackModel] : [])];
       const gerado = await geraComCadeia({
         apiKey: env.OPENROUTER_API_KEY,
         models,
@@ -199,7 +231,7 @@ export async function runPipeline({
       await putArtefato(env, pipeline, date, "html", html);
 
       await beat(`validacao_t${tentativa}`);
-      const v = validar(html, noticias.payload, estado, exposicaoJson);
+      const v = validar(html, noticias.payload, estado, exposicaoJson, precos);
       v.log.data = date;
       await putArtefato(env, pipeline, date, "validacao", v.log);
       validacaoLog = v.log;

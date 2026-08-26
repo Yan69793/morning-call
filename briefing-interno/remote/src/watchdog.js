@@ -98,7 +98,11 @@ export async function watchdog({ env, ctx, dateTag, trigger: _trigger = "cron", 
     modo === "local" || !state
       ? " Se o pipeline local tiver enviado, a sentinela local cobre o caso (worker fora do ar na janela do claim)."
       : "";
-  const comoEnviar = `Para enviar de verdade: POST https://sz-briefing-remote.prospects-intel.workers.dev/run?date=${date} com header x-run-trigger-key (sem ?dry=1).`;
+  // IMPORTANTE: o /run real (envio) precisa de &force=1. O cron e o retry
+  // rodam dry e fecham failed com attempts >= 2; o claim do DO bloqueia a
+  // retomada nesse estado sem force (state-do.js L112: attempts_exhausted).
+  // Sem &force=1 o primeiro envio manual falha e parece quebrado.
+  const comoEnviar = `Para enviar de verdade: POST https://sz-briefing-remote.prospects-intel.workers.dev/run?date=${date}&force=1 com header x-run-trigger-key (sem ?dry=1).`;
 
   await enviarAlerta({
     env,

@@ -6,6 +6,7 @@
 // web search e incompativel por construcao com a REGRA 1 do validador.
 // Nao reativar sem mudar a REGRA 1.
 
+import { ATIVOS_META } from "../collect/precos.js";
 import { UA } from "../collect/noticias.js";
 
 export const DEFAULT_MODEL = "deepseek/deepseek-v4-pro";
@@ -30,10 +31,22 @@ REGRAS ABSOLUTAS:
    NUNCA cite Morning Call nem Radar Quant como projetos: em 13/08 o Yan tirou
    as secoes de dados dos dois do briefing, e a leitura por projeto deles tambem saiu.
 4. Briefing sem nenhuma chamada direcional e invalido. Encontre pelo menos uma leitura relevante.
+5. Todo nivel de mercado citado PRECISA sair com o numero EXATO, a unidade e
+   as casas da tabela COTACOES do prompt ("a 174.577 pontos", "R$ 5,1625",
+   "US$ 82,36", "14,00% a.a."). NUNCA copie o numero cru com ponto decimal
+   ("174577.0"), nunca cite nivel sem unidade e nunca use virgula como
+   separador de milhar ("174,577" e 1000x menor e reprova o briefing).
 
 FORMATO DO BRIEFING (HTML):
-- Estrutura limpa, sem CSS externo, self-contained.
-- Formato dos bancos globais (pesquisado em 13/08 no Deutsche Bank, Bloomberg e
+- Gere apenas o MIDLO do briefing, em HTML minimo de conteudo, SEM casca de
+  documento. Nao use <html>, <head>, <body>, <style>, <script>, comentario,
+  doctype, tabela ou qualquer atributo de apresentacao (style, class, id).
+- Use apenas estas tags estruturais: <h2> para titulo de secao,
+  <p> para paragrafo, <li> para item de lista, <b> para enfase, <a> para link
+  de fonte. NAO use <h1>: o <h1> e reservado ao cabecalho do e-mail. Nao
+  invente <h1> nem outro nivel de cabecalho.
+- Estrutura limpa, self-contained no conteudo. Formato dos bancos globais
+  (pesquisado em 13/08 no Deutsche Bank, Bloomberg e
   Goldman): poucos blocos, cada um com titulo em negrito, 2-3 frases densas em
   numero exato com comparacao historica ("melhor semana desde 2008"), e a ultima
   frase diz por que importa para o mercado. Sem lista de recomendacao, sem secao
@@ -110,12 +123,106 @@ function pyFmt(v) {
   return v;
 }
 
+// pyStr: replica a stringificacao de float do Python (str(float)).
+// `str(171032.0)` = "171032.0", mas `String(171032)` no JS = "171032" (omite
+// o .0). Desde 26/08/2026 o bloco COTACOES usa fmtNivel (nivel formatado), e
+// o pyStr ficou so para o ramo YAHOO FALLBACK do Radar Quant abaixo, que o
+// Python imprime com str(). Cobre inteiros float-like e floats fracionarios.
+function pyStr(v) {
+  if (v === null || v === undefined) return String(v);
+  const n = Number(v);
+  if (Number.isInteger(n)) return `${n}.0`;
+  return String(n);
+}
+
+// fmtNumBR: porta de _fmt_num_br (gerar_briefing.py). Ponto separa milhar,
+// virgula separa decimal, zeros a direita mantidos quando a casa exige.
+// O arredondamento e o toFixed direto, sem pyRound: multiplicar por 10^d
+// antes de arredondar introduce uma segunda rodada de erro de float
+// (2.675*100 da 267.5 EXATO no JS e vira "2.68" no pyRound, quando o Python
+// ve 2.6749999... e emite "2.67"). O toFixed arredonda o MESMO double que o
+// f-string do Python, e os vetores compartilhados fmt_vectors.json prendem a
+// saida identica. Nunca produz virgula de milhar ("174,577").
+export function fmtNumBR(valor, dec) {
+  const s = Number(valor).toFixed(dec);
+  const [inteiro, resto] = s.split(".");
+  const gru = inteiro.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  return resto ? `${gru},${resto}` : gru;
+}
+
+// fmtNivel: porta de _fmt_nivel (gerar_briefing.py). display_unit vazio
+// (ativo desconhecido) devolve so o numero. Moeda antes ("R$ 5,1625"), as
+// demais unidades depois ("174.577 pontos", "14,00% a.a.").
+export function fmtNivel(ticker, valor) {
+  const meta = ATIVOS_META[ticker] || {};
+  const unit = meta.display_unit || "";
+  const base = fmtNumBR(valor, meta.display_decimals ?? 0);
+  if (!unit) return base;
+  if (unit === "R$" || unit === "US$") return `${unit} ${base}`;
+  if (unit.startsWith("%")) return `${base}${unit}`; // "% a.a." cola no numero
+  return `${base} ${unit}`;
+}
+
+// blocoPrecos: porta de _bloco_precos (gerar_briefing.py L150-184). Injeta a
+// cotacao de fechamento no prompt SEMPRE, nao so em fallback. Sem ativos, o
+// bloco manda o modelo NAO citar nivel — e a REGRA 6 reprova se citar.
+export function blocoPrecos(precos) {
+  const ativos = precos?.ativos || {};
+  const entradas = Object.keys(ativos);
+  if (!entradas.length) {
+    return (
+      "=== COTACOES ===\n" +
+      "INDISPONIVEL. Nao cite nivel, cotacao ou pontuacao de nenhum ativo " +
+      "neste briefing. Fale de direcao e de causa, sem numero de mercado."
+    );
+  }
+
+  const linhas = ["=== COTACOES (fechamento do ultimo pregao encerrado) ==="];
+  linhas.push(
+    "Use EXATAMENTE estes numeros ao citar nivel de mercado, no formato da " +
+      "tabela (unidade e casas ja aplicadas, ex.: '174.577 pontos', " +
+      "'R$ 5,1625', 'US$ 82,36', '14,00% a.a.'). Nao arredonde para valor " +
+      "diferente, nao complete de memoria, nao cite ativo que nao esteja " +
+      "nesta lista. Nunca use numero cru ('174577.0') nem virgula de milhar " +
+      "('174,577', que e 1000x menor). O portao de validacao confere cada " +
+      "nivel citado contra esta tabela e reprova o briefing fora da " +
+      "tolerancia.",
+  );
+  for (const ticker of entradas) {
+    const d = ativos[ticker];
+    const varNum = d.change_percent;
+    let varTxt = "";
+    if (typeof varNum === "number") {
+      // f"{var:+.2f}%" do Python: sinal explicito e 2 casas.
+      varTxt = `, var ${varNum >= 0 ? "+" : ""}${varNum.toFixed(2)}%`;
+    }
+    const close = d.close;
+    const nivel =
+      typeof close === "number" && Number.isFinite(close)
+        ? fmtNivel(ticker, close)
+        : "n/d";
+    linhas.push(
+      `  ${ticker}: ${nivel} (pregao ${d.trade_date}${varTxt}) [${d.fonte || "n/d"}]`,
+    );
+  }
+  const erros = precos?.erros || [];
+  if (erros.length) {
+    linhas.push(`  Ativos sem cotacao nesta coleta: ${erros.length}. Nao cite nivel deles.`);
+  }
+  return linhas.join("\n");
+}
+
 // buildUserPrompt: porta de _build_user_prompt, byte a byte na ordem e no
-// conteudo (o snapshot de paridade em tests/ prende isso).
-export function buildUserPrompt(noticias, estado, exposicao, dataTag, agendaPayload, agendaStatus) {
+// conteudo (o snapshot de paridade em tests/ prende isso). `precos` injeta o
+// bloco COTACOES logo apos a DATA, na mesma ordem do Python (gerada sobre
+// precos_<data>.json real, nunca o ramo INDISPONIVEL dos dias sem coleta).
+export function buildUserPrompt(noticias, estado, exposicao, dataTag, agendaPayload, agendaStatus, precos) {
   const partes = [];
 
   partes.push(`DATA: ${dataTag}`);
+  partes.push("");
+
+  partes.push(blocoPrecos(precos));
   partes.push("");
 
   const itens = noticias.itens || [];
@@ -161,8 +268,8 @@ export function buildUserPrompt(noticias, estado, exposicao, dataTag, agendaPayl
       partes.push("YAHOO FALLBACK ACIONADO (scan fora do ar):");
       for (const [ticker, d] of Object.entries(yahoo.dados || {})) {
         partes.push(
-          `  ${ticker}: ${d.price} ` +
-            `(var: ${d.changePercent}%) ` +
+          `  ${ticker}: ${pyStr(d.price)} ` +
+            `(var: ${pyStr(d.changePercent)}%) ` +
             `[${d.fonte ?? "Yahoo"}]`,
         );
       }
@@ -288,13 +395,113 @@ export async function callOpenrouter({ apiKey, model, systemPrompt, userPrompt, 
   return content;
 }
 
+// Portable tree-walk sanitizer of the LLM output (porta de
+// scripts/_sanitizar_briefing.py). Devolve os proprios textos (h1->h2, so
+// tags h2/p/li/ul/ol/b/strong/a/br, sem atributo, href so http/https, e
+// script/style descartados com o conteudo). Semantica alinhada ao Python;
+// nao aspira a byte a byte (paridade funcional, ajuste 3).
+const TAGS_ALLOWED = new Set(["h2", "p", "li", "ul", "ol", "b", "strong", "a", "br"]);
+const TAGS_DESCARTE = new Set(["script", "style"]);
+
+function sanitizeAttrs(attrs) {
+  // Vira objeto; retorna {href} so se for http/https. Caso contrario {}.
+  const out = {};
+  for (const a of attrs) {
+    const val = a.value === null || a.value === undefined ? null : String(a.value);
+    if (a.name.toLowerCase() === "href" && val) {
+      if (/^https?:\/\//i.test(val.trim())) out.href = val.trim();
+    }
+    // style/class/id/on*/desconhecidos: ignorados (nunca entram em out)
+  }
+  return out;
+}
+
+export function sanitizarConteudo(html) {
+  if (!html) return "";
+  // remove comentarios, doctype e prolog
+  let s = html
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .replace(/<!DOCTYPE[^>]*>/gi, "")
+    .replace(/<\?[\s\S]*?\?>/g, "");
+  // remove script/style INTEIROS (conteudo incluido)
+  s = s.replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, "");
+
+  const out = [];
+  // pilha de descarte: "tudo" | "tag"
+  const pilha = [];
+  const emDescarteTudo = () => pilha.includes("tudo");
+  const trim = (x) => x.trim();
+
+  const pushText = (data) => {
+    if (!emDescarteTudo()) out.push(data);
+  };
+
+  // tokenizer simples de tags abertas/fechadas
+  const re = /<\/?[a-zA-Z][^>]*>|[^<]+/g;
+  for (const tok of s.matchAll(re)) {
+    const t = tok[0];
+    if (!t.startsWith("<")) {
+      pushText(t);
+      continue;
+    }
+    // t é uma tag
+    const closing = /^<\//.test(t);
+    const body = t.replace(/^<\/?/, "").replace(/\/?>$/, "");
+    const m = /^([a-zA-Z][a-zA-Z0-9]*)/.exec(trim(body));
+    if (!m) continue;
+    let tag = m[1].toLowerCase();
+    if (tag === "h1") tag = "h2"; // h1 é do template
+
+    if (TAGS_DESCARTE.has(tag)) {
+      if (!closing && !emDescarteTudo()) pilha.push("tudo");
+      if (closing) {
+        const idx = pilha.lastIndexOf("tudo");
+        if (idx >= 0) pilha.splice(idx, 1);
+      }
+      continue;
+    }
+    if (closing) {
+      if (TAGS_ALLOWED.has(tag) && !emDescarteTudo()) out.push(`</${tag}>`);
+      else {
+        const idx = pilha.lastIndexOf("tag");
+        if (idx >= 0) pilha.splice(idx, 1);
+      }
+      continue;
+    }
+    // abertura
+    const attrRe = /([a-zA-Z:][a-zA-Z0-9:._-]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/g;
+    const attrs = [];
+    let am;
+    while ((am = attrRe.exec(body)) !== null) {
+      attrs.push({ name: am[1], value: am[2] ?? am[3] ?? am[4] ?? "" });
+    }
+    const safe = sanitizeAttrs(attrs);
+    if (!TAGS_ALLOWED.has(tag)) {
+      if (!emDescarteTudo()) pilha.push("tag");
+      continue;
+    }
+    if (emDescarteTudo()) continue; // dentro de script/style nada escapa
+    if (tag === "a") {
+      out.push(safe.href ? `<a href="${safe.href}">` : "<a>");
+    } else if (tag === "br") {
+      out.push("<br>");
+    } else {
+      out.push(`<${tag}>`);
+    }
+  }
+  let res = out.join("");
+  res = res.replace(/[ \t\r\f\v]+/g, " ");
+  res = res.replace(/\n\s*\n+/g, "\n");
+  return res.trim();
+}
+
 // geraComCadeia: porta do loop de modelos do main() (primario -> fallback).
 // Devolve { html, model } ou lança quando todos falham.
 export async function geraComCadeia({ apiKey, models, systemPrompt, userPrompt, openrouterUrl, fetchImpl }) {
   let lastError = null;
   for (const model of models) {
     try {
-      const html = await callOpenrouter({
+      const raw = await callOpenrouter({
         apiKey,
         model,
         systemPrompt,
@@ -302,8 +509,14 @@ export async function geraComCadeia({ apiKey, models, systemPrompt, userPrompt, 
         openrouterUrl,
         fetchImpl,
       });
+      if (!raw || raw.trim().length < 200) {
+        lastError = new Error(`resposta muito curta (${raw ? raw.length : 0} chars)`);
+        continue;
+      }
+      // Sanitiza o conteudo antes de devolver (mesma logica do main() Python).
+      const html = sanitizarConteudo(raw);
       if (!html || html.trim().length < 200) {
-        lastError = new Error(`resposta muito curta (${html ? html.length : 0} chars)`);
+        lastError = new Error("conteudo vazio apos sanitizacao");
         continue;
       }
       return { html, model };

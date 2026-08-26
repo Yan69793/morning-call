@@ -1,14 +1,25 @@
 # sz-briefing-remote — execucao remota do Briefing Matinal interno.
 #
-# Local (Task Scheduler 07h00 BRT) segue como primario; este worker e o
-# fallback que roda com o PC desligado. O claim atomico no Durable Object
-# garante exatamente uma entrega por dia, Local ou Remote.
+# Cron remoto foi movido para 07:00 BRT (deploy 2026-08-25, v 2bb5f7cc).
+# Em 2026-08-25 o local ainda roda as 07:00 (a troca para 06:55 exige a senha
+# do logon interativo do Windows). Enquanto isso, com a maquina LIGADA, o
+# remote clama as 07:00:00 e o local recua no PASSO 2.5 (ja_reservado): dia
+# util e PC ligado, NENHUM envio ocorre, so o alerta de revisao as 07:40. O
+# passo que destrava: `schtasks /Change /TN "Szuchmacher-BriefingMatinal" /ST 06:55`.
 #
 # Crons em UTC. BRT = UTC-3 fixo (sem horario de verao desde 2019).
-#   5 10 * * 1-5  -> 07:05 BRT  run (fallback apos a janela local)
-#   35 10 * * 1-5 -> 07:35 BRT  retry unico de falha remota
-#   40 10 * * 1-5 -> 07:40 BRT  watchdog (alerta + recover opcional)
-# Feriado B3 e checado em codigo (src/holidays.js), como no pipeline local.
+#   0  10 * * 1-5  -> 07:00 BRT  run (SEMPRE dry, nunca envia; local espera 06:55)
+#   35 10 * * 1-5  -> 07:35 BRT  retry unico de falha remota (dry)
+#   40 10 * * 1-5  -> 07:40 BRT  watchdog (alerta + recover opcional, dry)
+#
+# O cron NUNCA envia: gera+valida em dry (REGRA 6) e o watchdog aleria quando
+# o briefing ficou pronto. O envio real ao destinatario unico e um POST /run
+# MANUAL sem ?dry=1 com RUN_TRIGGER_KEY humana (decisao de 19/08: nada sai sem
+# sua revisao). O /run manual precisa de &force=1: o cron/retry fecham failed
+# com attempts >= 2 e o claim do DO bloqueia sem force (ler state-do.js L112).
+#
+# A REGRA 6 esta em producao desde o deploy v 2bb5f7cc: sem numeros conferidos
+# nao ha envio (fail-closed).
 #
 # Rollback: `wrangler deployments rollback` ou `wrangler delete`.
 # O Local nunca depende deste worker: sem ele, o pipeline local segue como hoje.
@@ -23,6 +34,7 @@ workers_dev = true
 ENVIRONMENT = "production"
 FROM_EMAIL = "yan@szuchmacher.com.br"
 OPENROUTER_MODEL = "google/gemma-3-27b-it"
+OPENROUTER_FALLBACK_MODEL = "meta-llama/llama-3.3-70b-instruct"
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 MORNING_CALL_URL = "https://morning-call.prospects-intel.workers.dev/api/report/latest"
 RADAR_QUANT_URL = "https://radar-quant-brasil.prospects-intel.workers.dev/api/radar/latest"
@@ -45,4 +57,4 @@ tag = "v1"
 new_sqlite_classes = ["PipelineStateDO"]
 
 [triggers]
-crons = ["5 10 * * 1-5", "35 10 * * 1-5", "40 10 * * 1-5"]
+crons = ["0 10 * * 1-5", "35 10 * * 1-5", "40 10 * * 1-5"]
