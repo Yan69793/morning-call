@@ -12,6 +12,7 @@ import { fetchSgsPeriodo, parseSgsDateToIso, sgsPeriodUrl } from "./bcb/sgs.js";
 import { SGS_CODES, SNAPSHOT_KEYS } from "./keys.js";
 import type { DataProviderContext } from "./types.js";
 import { parseTreasuryRows } from "./ustreasury.js";
+import { fetchWithTimeout } from "./http.js";
 import type { AssetSeries, CurveSeries } from "../quant/build.js";
 import type { PriceBar } from "../quant/metrics.js";
 
@@ -52,7 +53,7 @@ function sgsToBars(obs: readonly { data: string; valor: string }[], tradeDate: s
  * configurada: sem ela viram N/D em vez de série inventada.
  */
 export async function fetchSeriesBundle(ctx: DataProviderContext): Promise<SeriesBundle> {
-  const fetchFn = ctx.fetchFn ?? fetch;
+  const fetchFn = ctx.fetchFn ?? fetchWithTimeout;
   const ativos: AssetSeries[] = [];
   const curvas: CurveSeries[] = [];
   const semSerie: string[] = [];

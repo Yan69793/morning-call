@@ -9,6 +9,7 @@
  */
 import type { RawScrapedEvent } from "../../schemas/agenda.js";
 import type { AgendaProvider, AgendaProviderContext } from "./types.js";
+import { fetchWithTimeout } from "../http.js";
 
 const FOREX_FACTORY_URL = "https://www.forexfactory.com/calendar";
 
@@ -154,7 +155,7 @@ export const forexFactoryProvider: AgendaProvider = {
   name: "forexfactory.com",
 
   async fetch(ctx: AgendaProviderContext): Promise<RawScrapedEvent[]> {
-    const fetchFn = ctx.fetchFn ?? fetch;
+    const fetchFn = ctx.fetchFn ?? fetchWithTimeout;
     try {
       const resp = await fetchFn(FOREX_FACTORY_URL, {
         headers: {

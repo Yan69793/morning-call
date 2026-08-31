@@ -6,6 +6,7 @@
 import type { DataPoint } from "../schemas/data.js";
 import { SNAPSHOT_KEYS } from "./keys.js";
 import type { DataProvider, DataProviderContext } from "./types.js";
+import { fetchWithTimeout } from "./http.js";
 
 function extractTag(xml: string, tag: string): string | null {
   const re = new RegExp(`<${tag}[^>]*>([^<]*)</${tag}>`, "i");
@@ -85,7 +86,7 @@ export const usTreasuryProvider: DataProvider = {
     const url =
       "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/pages/xml" +
       `?data=daily_treasury_yield_curve&field_tdr_date_value=${year}`;
-    const fetchFn = ctx.fetchFn ?? fetch;
+    const fetchFn = ctx.fetchFn ?? fetchWithTimeout;
     try {
       const res = await fetchFn(url);
       if (!res.ok) {

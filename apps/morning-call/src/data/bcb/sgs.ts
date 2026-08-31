@@ -6,6 +6,7 @@ import type { DataPoint } from "../../schemas/data.js";
 import type { Unit, Venue } from "../../schemas/common.js";
 import { SGS_CODES, SNAPSHOT_KEYS } from "../keys.js";
 import type { DataProvider, DataProviderContext } from "../types.js";
+import { fetchWithTimeout } from "../http.js";
 
 export interface SgsObservation {
   data: string; // dd/MM/yyyy
@@ -160,7 +161,7 @@ export function observationsToPoint(
 export const bcbSgsProvider: DataProvider = {
   name: "bcb-sgs",
   async fetch(ctx: DataProviderContext): Promise<DataPoint[]> {
-    const fetchFn = ctx.fetchFn ?? fetch;
+    const fetchFn = ctx.fetchFn ?? fetchWithTimeout;
     const points: DataPoint[] = [];
     for (const s of SERIES) {
       const url = sgsPeriodUrl(s.code, ctx.tradeDate, s.lookbackDays);

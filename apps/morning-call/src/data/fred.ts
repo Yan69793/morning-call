@@ -5,6 +5,7 @@ import type { DataPoint } from "../schemas/data.js";
 import type { Unit } from "../schemas/common.js";
 import { SNAPSHOT_KEYS } from "./keys.js";
 import type { DataProvider, DataProviderContext } from "./types.js";
+import { fetchWithTimeout } from "./http.js";
 
 const SERIES: { id: string; key: string; unit: Unit; venue: "US" | "GLOBAL_24H" }[] = [
   { id: "DGS2", key: SNAPSHOT_KEYS.UST_2Y, unit: "pct", venue: "US" },
@@ -55,7 +56,7 @@ export const fredProvider: DataProvider = {
         nd(s.key, "FRED_API_KEY ausente — N/D — REQUER VERIFICAÇÃO", ctx.observedAt, s.venue),
       );
     }
-    const fetchFn = ctx.fetchFn ?? fetch;
+    const fetchFn = ctx.fetchFn ?? fetchWithTimeout;
     const points: DataPoint[] = [];
     for (const s of SERIES) {
       try {

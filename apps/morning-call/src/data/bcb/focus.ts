@@ -5,6 +5,7 @@
 import type { DataPoint } from "../../schemas/data.js";
 import { SNAPSHOT_KEYS } from "../keys.js";
 import type { DataProvider, DataProviderContext } from "../types.js";
+import { fetchWithTimeout } from "../http.js";
 
 interface FocusRow {
   Indicador?: string;
@@ -100,7 +101,7 @@ export function focusUrl(indicador: string, ano: string): string {
 export const bcbFocusProvider: DataProvider = {
   name: "bcb-focus",
   async fetch(ctx: DataProviderContext): Promise<DataPoint[]> {
-    const fetchFn = ctx.fetchFn ?? fetch;
+    const fetchFn = ctx.fetchFn ?? fetchWithTimeout;
     const ano = ctx.tradeDate.slice(0, 4);
     return Promise.all(
       INDICATORS.map(async ({ indicador, key }): Promise<DataPoint> => {

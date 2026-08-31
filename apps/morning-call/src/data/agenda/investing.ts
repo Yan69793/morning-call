@@ -10,6 +10,7 @@
  */
 import type { RawScrapedEvent } from "../../schemas/agenda.js";
 import type { AgendaProvider, AgendaProviderContext } from "./types.js";
+import { fetchWithTimeout } from "../http.js";
 
 function mapCountryToPais(country: string): RawScrapedEvent["pais"] {
   const lower = country.toLowerCase().trim();
@@ -58,7 +59,7 @@ export const investingProvider: AgendaProvider = {
   name: "investing.com",
 
   async fetch(ctx: AgendaProviderContext): Promise<RawScrapedEvent[]> {
-    const fetchFn = ctx.fetchFn ?? fetch;
+    const fetchFn = ctx.fetchFn ?? fetchWithTimeout;
     try {
       // Tenta a API de calendario que o frontend React consome
       // O endpoint retorna JSON com eventos do dia
