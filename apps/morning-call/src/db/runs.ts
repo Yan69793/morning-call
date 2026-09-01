@@ -91,6 +91,30 @@ export async function finishRun(
     .run();
 }
 
+/**
+ * Rede de segurança para quando o Workflow esgota os retries do próprio motor (5, por padrão) e
+ * a instância morre como "errored" sem que nenhum `finishRun` explícito tenha rodado — nesse ponto
+ * o `run()` já lançou a exceção para fora de qualquer `step.do`, e o único dado ainda confiável é
+ * o `trade_date` computado no topo do método, não um `runId` de um step que pode nunca ter concluído.
+ *
+ * `trade_date` é UNIQUE (comentário no topo do arquivo), então localiza a run certa mesmo quando o
+ * step que criou o id falhou antes de devolvê-lo para quem chama. O filtro `status = 'running'` é
+ * o que torna a chamada segura mesmo se um caminho normal (finishRun explícito) já tiver fechado a
+ * run antes desta rede de segurança ser alcançada.
+ */
+export async function markRunFailedIfRunning(
+  db: D1Database,
+  tradeDate: string,
+  finishedAt: string,
+): Promise<void> {
+  await db
+    .prepare(
+      `UPDATE runs SET status = 'failed', finished_at = ? WHERE trade_date = ? AND status = 'running'`,
+    )
+    .bind(finishedAt, tradeDate)
+    .run();
+}
+
 export interface PersistTradeInput {
   trade: TradeCard;
   publicado: boolean;

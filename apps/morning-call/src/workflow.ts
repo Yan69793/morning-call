@@ -18,6 +18,7 @@ import { buildMarketSnapshot, listNdKeys } from "./data/snapshot.js";
 import {
   ensureRun,
   finishRun,
+  markRunFailedIfRunning,
   saveQuantMetrics,
   saveReportPointer,
   saveSnapshot,
@@ -75,317 +76,341 @@ export class MorningCallWorkflow extends WorkflowEntrypoint<Env, MorningCallPara
     const now = new Date(event.timestamp);
     const tradeDate = todayTradeDateBrt(now);
 
-    // ── Step 1: init + snapshot ──
-    const s1 = await step.do("init-snapshot", async (): Promise<Step1Result> => {
-      const session = checkSession(tradeDate);
-      if (!session.shouldRunMorningCall) {
-        return {
-          aborted: true,
-          reason: session.reason ?? "sem pregão B3",
-          runId: "",
-          tradeDate,
-          snapshot: null as unknown as MarketSnapshot,
-          faltantes: [],
-          correlacoes: [],
-        };
-      }
-
-      const observedAt = now.toISOString();
-      const ensured = await ensureRun(this.env.DB, tradeDate, observedAt);
-      const runId = ensured.runId;
-
-      const snapshot = await buildMarketSnapshot({
-        runId,
-        tradeDate,
-        observedAt,
-        secrets: { fredApiKey: this.env.FRED_API_KEY },
-      });
-
-      const faltantes = listNdKeys(snapshot);
-      await saveSnapshot(this.env.DB, snapshot);
-
-      // Séries históricas: sem elas o quant não tem do que calcular retorno, vol e correlação, e
-      // `correlacoes_63d: []` deixa o MAX_RHO do comitê inerte — o gate roda e nunca barra.
-      const bundle = await fetchSeriesBundle({
-        tradeDate,
-        observedAt,
-        secrets: { fredApiKey: this.env.FRED_API_KEY },
-      });
-      const metrics = buildQuantMetrics({
-        runId,
-        tradeDate,
-        ativos: bundle.ativos,
-        curvas: bundle.curvas,
-        faltantes: [...faltantes, ...bundle.semSerie],
-        janelaCorrelacao: JANELA_CORRELACAO,
-      });
-      await saveQuantMetrics(this.env.DB, metrics);
-
-      return {
-        aborted: false,
-        runId,
-        tradeDate,
-        snapshot,
-        faltantes,
-        correlacoes: metrics.correlacoes_63d,
-      };
-    });
-
-    if (s1.aborted) {
-      console.log(JSON.stringify({ event: "workflow_aborted", reason: s1.reason }));
-      return { aborted: true, reason: s1.reason };
-    }
-
-    // ── Step 2: strategist (LLM) ──
-    const deepseekKey = this.env.DEEPSEEK_API_KEY;
-    const openRouterKey = this.env.OPENROUTER_API_KEY;
-    const useDeepSeek = Boolean(deepseekKey);
-    const apiKey = useDeepSeek ? (deepseekKey ?? "") : (openRouterKey ?? "");
-    if (!apiKey) {
-      await finishRun(this.env.DB, s1.runId, "partial", s1.faltantes, new Date().toISOString());
-      console.log(JSON.stringify({ event: "workflow_no_apikey", runId: s1.runId }));
-      return { aborted: false, runId: s1.runId, reason: "API_KEY ausente" };
-    }
-
-    const model = useDeepSeek
-      ? "deepseek-chat"
-      : (this.env.STRATEGIST_MODEL ?? "anthropic/claude-opus-4-7");
-
-    const s2 = await step.do("strategist", async (): Promise<Step2Result> => {
-      const strat = await runStrategist({
-        snapshot: s1.snapshot,
-        apiKey,
-        model,
-        runId: s1.runId,
-        deepseekApi: useDeepSeek,
-      });
-      return {
-        raw: strat.raw,
-        trades: strat.trades,
-        model: strat.model,
-        promptVersion: strat.provenance.prompt_version,
-        generatedAt: strat.provenance.generated_at,
-        echo: strat.echo,
-      };
-    });
-
-    // Eco do prompt derruba a rodada aqui, fora do `step.do`, e de propósito: dentro do step, o
-    // throw dispararia retry, e um modelo que copiou o exemplo copia de novo — pagaríamos a mesma
-    // chamada várias vezes para chegar no mesmo lugar. Nada é gravado como relatório: publicar um
-    // Morning Call que é o prompt refletido de volta é pior que não publicar nada.
-    if (s2.echo.length > 0) {
-      await finishRun(this.env.DB, s1.runId, "failed", s1.faltantes, new Date().toISOString());
-      console.log(
-        JSON.stringify({
-          event: "workflow_prompt_echo",
-          runId: s1.runId,
-          model: s2.model,
-          promptVersion: s2.promptVersion,
-          motivos: s2.echo,
-        }),
-      );
-      return { aborted: true, runId: s1.runId, reason: "eco do prompt", motivos: s2.echo };
-    }
-
-    // ── Step 2.5: economic calendar (best-effort, nao bloqueia) ──
-    const s2b = await step.do("economic-calendar", async (): Promise<Step2bResult> => {
-      try {
-        // Scraping de eventos
-        const { eventos, fontes } = await fetchAgendaEvents({
-          tradeDate: s1.tradeDate,
-        });
-
-        // LLM para analise de impacto (mesmo com 0 eventos, gera agenda de dia calmo)
-        const deepseekKeyForCal = this.env.DEEPSEEK_API_KEY;
-        const openRouterKeyForCal = this.env.OPENROUTER_API_KEY;
-        const useDeepSeekForCal = Boolean(deepseekKeyForCal);
-        const calApiKey = useDeepSeekForCal
-          ? (deepseekKeyForCal ?? "")
-          : (openRouterKeyForCal ?? "");
-        const calModel = useDeepSeekForCal
-          ? "deepseek-chat"
-          : (this.env.STRATEGIST_MODEL ?? "anthropic/claude-opus-4-7");
-
-        if (!calApiKey) {
-          return { agenda: null, agendaError: "API_KEY ausente para calendario" };
-        }
-
-        const calResult = await runCalendarAgent({
-          input: {
-            trade_date: s1.tradeDate,
-            eventos,
-            fonte: fontes.join(", ") || "fallback-estatico",
-          },
-          apiKey: calApiKey,
-          model: calModel,
-          runId: s1.runId,
-          deepseekApi: useDeepSeekForCal,
-        });
-
-        // Diferente do strategist, eco aqui nao aborta a rodada inteira: o calendario e
-        // best-effort e o resto do Morning Call (trades, gates) nao depende dele. Só a agenda
-        // fabricada fica de fora, tratada como a mesma falha best-effort do catch abaixo.
-        if (calResult.echo.length > 0) {
-          console.log(
-            JSON.stringify({
-              event: "workflow_calendar_prompt_echo",
-              runId: s1.runId,
-              model: calResult.model,
-              motivos: calResult.echo,
-            }),
-          );
+    try {
+      // ── Step 1: init + snapshot ──
+      const s1 = await step.do("init-snapshot", async (): Promise<Step1Result> => {
+        const session = checkSession(tradeDate);
+        if (!session.shouldRunMorningCall) {
           return {
-            agenda: null,
-            agendaError: `eco do prompt no calendario: ${calResult.echo.join(" | ")}`,
+            aborted: true,
+            reason: session.reason ?? "sem pregão B3",
+            runId: "",
+            tradeDate,
+            snapshot: null as unknown as MarketSnapshot,
+            faltantes: [],
+            correlacoes: [],
           };
         }
 
-        console.log(
-          JSON.stringify({
-            event: "workflow_calendar_ok",
-            runId: s1.runId,
-            eventos: calResult.agenda.eventos.length,
-            nivel_alerta: calResult.agenda.nivel_alerta,
-            fontes,
-          }),
-        );
+        const observedAt = now.toISOString();
+        const ensured = await ensureRun(this.env.DB, tradeDate, observedAt);
+        const runId = ensured.runId;
 
-        return { agenda: calResult.agenda };
-      } catch (err) {
-        console.log(
-          JSON.stringify({
-            event: "workflow_calendar_error",
-            error: err instanceof Error ? err.message : "desconhecido",
-            runId: s1.runId,
-          }),
-        );
+        const snapshot = await buildMarketSnapshot({
+          runId,
+          tradeDate,
+          observedAt,
+          secrets: { fredApiKey: this.env.FRED_API_KEY },
+        });
+
+        const faltantes = listNdKeys(snapshot);
+        await saveSnapshot(this.env.DB, snapshot);
+
+        // Séries históricas: sem elas o quant não tem do que calcular retorno, vol e correlação, e
+        // `correlacoes_63d: []` deixa o MAX_RHO do comitê inerte — o gate roda e nunca barra.
+        const bundle = await fetchSeriesBundle({
+          tradeDate,
+          observedAt,
+          secrets: { fredApiKey: this.env.FRED_API_KEY },
+        });
+        const metrics = buildQuantMetrics({
+          runId,
+          tradeDate,
+          ativos: bundle.ativos,
+          curvas: bundle.curvas,
+          faltantes: [...faltantes, ...bundle.semSerie],
+          janelaCorrelacao: JANELA_CORRELACAO,
+        });
+        await saveQuantMetrics(this.env.DB, metrics);
+
         return {
-          agenda: null,
-          agendaError: err instanceof Error ? err.message : "erro desconhecido",
+          aborted: false,
+          runId,
+          tradeDate,
+          snapshot,
+          faltantes,
+          correlacoes: metrics.correlacoes_63d,
         };
-      }
-    });
-
-    // ── Step 3: gates + report + push ──
-    const s3 = await step.do("gates-report", async (): Promise<Step3Result> => {
-      const { gates, published, rejected } = decidirPublicacao({
-        snapshot: s1.snapshot,
-        claims: s2.raw.quant_claims ?? [],
-        trades: s2.trades,
-        metrics: { correlacoes_63d: s1.correlacoes },
       });
 
-      for (const t of published) {
-        await saveTrade(this.env.DB, {
-          trade: t,
-          publicado: true,
-          motivo_rejeicao: null,
-          redteam_veredito: null,
+      if (s1.aborted) {
+        console.log(JSON.stringify({ event: "workflow_aborted", reason: s1.reason }));
+        return { aborted: true, reason: s1.reason };
+      }
+
+      // ── Step 2: strategist (LLM) ──
+      const deepseekKey = this.env.DEEPSEEK_API_KEY;
+      const openRouterKey = this.env.OPENROUTER_API_KEY;
+      const useDeepSeek = Boolean(deepseekKey);
+      const apiKey = useDeepSeek ? (deepseekKey ?? "") : (openRouterKey ?? "");
+      if (!apiKey) {
+        await finishRun(this.env.DB, s1.runId, "partial", s1.faltantes, new Date().toISOString());
+        console.log(JSON.stringify({ event: "workflow_no_apikey", runId: s1.runId }));
+        return { aborted: false, runId: s1.runId, reason: "API_KEY ausente" };
+      }
+
+      const model = useDeepSeek
+        ? "deepseek-chat"
+        : (this.env.STRATEGIST_MODEL ?? "anthropic/claude-opus-4-7");
+
+      const s2 = await step.do("strategist", async (): Promise<Step2Result> => {
+        const strat = await runStrategist({
+          snapshot: s1.snapshot,
+          apiKey,
+          model,
+          runId: s1.runId,
+          deepseekApi: useDeepSeek,
         });
-      }
-      for (const r of rejected) {
-        await saveTrade(this.env.DB, {
-          trade: r.trade,
-          publicado: false,
-          motivo_rejeicao: r.motivo,
-          redteam_veredito: "rejeitar",
-        });
-      }
-
-      const generatedAt = new Date().toISOString();
-      const provenance = {
-        run_id: s1.runId,
-        model: s2.model,
-        prompt_version: s2.promptVersion,
-        generated_at: s2.generatedAt,
-      };
-
-      const morningCall = buildMorningCall({
-        runId: s1.runId,
-        tradeDate: s1.tradeDate,
-        generatedAt,
-        raw: s2.raw,
-        trades: published,
-        provenance,
+        return {
+          raw: strat.raw,
+          trades: strat.trades,
+          model: strat.model,
+          promptVersion: strat.provenance.prompt_version,
+          generatedAt: strat.provenance.generated_at,
+          echo: strat.echo,
+        };
       });
 
-      const validation = validateMorningCall(morningCall, {
-        crossCheck: gates.crossCheck,
-        correlacionados: gates.correlacionados,
-      });
-
-      const r2Key = `morning-call/${s1.tradeDate}/${s1.runId}.json`;
-      if (this.env.REPORTS) {
-        await this.env.REPORTS.put(r2Key, JSON.stringify(morningCall));
+      // Eco do prompt derruba a rodada aqui, fora do `step.do`, e de propósito: dentro do step, o
+      // throw dispararia retry, e um modelo que copiou o exemplo copia de novo — pagaríamos a mesma
+      // chamada várias vezes para chegar no mesmo lugar. Nada é gravado como relatório: publicar um
+      // Morning Call que é o prompt refletido de volta é pior que não publicar nada.
+      if (s2.echo.length > 0) {
+        await finishRun(this.env.DB, s1.runId, "failed", s1.faltantes, new Date().toISOString());
+        console.log(
+          JSON.stringify({
+            event: "workflow_prompt_echo",
+            runId: s1.runId,
+            model: s2.model,
+            promptVersion: s2.promptVersion,
+            motivos: s2.echo,
+          }),
+        );
+        return { aborted: true, runId: s1.runId, reason: "eco do prompt", motivos: s2.echo };
       }
 
-      await saveReportPointer(this.env.DB, {
-        runId: s1.runId,
-        generatedAt,
-        r2Key,
-        regime: morningCall.abertura.regime,
-        vies: morningCall.abertura.vies,
-        conviccao: morningCall.abertura.conviccao,
-        nTrades: published.length,
-        aprovado: validation.aprovado && gates.ok,
-        payload: {
-          morningCall,
-          validation,
-          gateReasons: gates.reasons,
-          agenda: s2b.agenda,
-        },
-      });
-
-      const status =
-        s1.faltantes.length > 0 || !validation.aprovado || !gates.ok ? "partial" : "ok";
-      await finishRun(this.env.DB, s1.runId, status, s1.faltantes, generatedAt);
-
-      // push resumo macro para Radar Quant
-      if (this.env.RADAR_QUANT_INGEST_URL) {
-        const ingestUrl = `${this.env.RADAR_QUANT_INGEST_URL.replace(/\/+$/, "")}/api/ingest/macro-summary`;
+      // ── Step 2.5: economic calendar (best-effort, nao bloqueia) ──
+      const s2b = await step.do("economic-calendar", async (): Promise<Step2bResult> => {
         try {
-          const summary = buildMacroSummary(morningCall);
-          await fetch(ingestUrl, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "x-ingest-secret": this.env.RADAR_QUANT_INGEST_SECRET ?? "",
-            },
-            body: JSON.stringify(summary),
+          // Scraping de eventos
+          const { eventos, fontes } = await fetchAgendaEvents({
+            tradeDate: s1.tradeDate,
           });
+
+          // LLM para analise de impacto (mesmo com 0 eventos, gera agenda de dia calmo)
+          const deepseekKeyForCal = this.env.DEEPSEEK_API_KEY;
+          const openRouterKeyForCal = this.env.OPENROUTER_API_KEY;
+          const useDeepSeekForCal = Boolean(deepseekKeyForCal);
+          const calApiKey = useDeepSeekForCal
+            ? (deepseekKeyForCal ?? "")
+            : (openRouterKeyForCal ?? "");
+          const calModel = useDeepSeekForCal
+            ? "deepseek-chat"
+            : (this.env.STRATEGIST_MODEL ?? "anthropic/claude-opus-4-7");
+
+          if (!calApiKey) {
+            return { agenda: null, agendaError: "API_KEY ausente para calendario" };
+          }
+
+          const calResult = await runCalendarAgent({
+            input: {
+              trade_date: s1.tradeDate,
+              eventos,
+              fonte: fontes.join(", ") || "fallback-estatico",
+            },
+            apiKey: calApiKey,
+            model: calModel,
+            runId: s1.runId,
+            deepseekApi: useDeepSeekForCal,
+          });
+
+          // Diferente do strategist, eco aqui nao aborta a rodada inteira: o calendario e
+          // best-effort e o resto do Morning Call (trades, gates) nao depende dele. Só a agenda
+          // fabricada fica de fora, tratada como a mesma falha best-effort do catch abaixo.
+          if (calResult.echo.length > 0) {
+            console.log(
+              JSON.stringify({
+                event: "workflow_calendar_prompt_echo",
+                runId: s1.runId,
+                model: calResult.model,
+                motivos: calResult.echo,
+              }),
+            );
+            return {
+              agenda: null,
+              agendaError: `eco do prompt no calendario: ${calResult.echo.join(" | ")}`,
+            };
+          }
+
+          console.log(
+            JSON.stringify({
+              event: "workflow_calendar_ok",
+              runId: s1.runId,
+              eventos: calResult.agenda.eventos.length,
+              nivel_alerta: calResult.agenda.nivel_alerta,
+              fontes,
+            }),
+          );
+
+          return { agenda: calResult.agenda };
         } catch (err) {
           console.log(
             JSON.stringify({
-              event: "workflow_macro_push_error",
+              event: "workflow_calendar_error",
               error: err instanceof Error ? err.message : "desconhecido",
               runId: s1.runId,
             }),
           );
+          return {
+            agenda: null,
+            agendaError: err instanceof Error ? err.message : "erro desconhecido",
+          };
         }
-      }
+      });
+
+      // ── Step 3: gates + report + push ──
+      const s3 = await step.do("gates-report", async (): Promise<Step3Result> => {
+        const { gates, published, rejected } = decidirPublicacao({
+          snapshot: s1.snapshot,
+          claims: s2.raw.quant_claims ?? [],
+          trades: s2.trades,
+          metrics: { correlacoes_63d: s1.correlacoes },
+        });
+
+        for (const t of published) {
+          await saveTrade(this.env.DB, {
+            trade: t,
+            publicado: true,
+            motivo_rejeicao: null,
+            redteam_veredito: null,
+          });
+        }
+        for (const r of rejected) {
+          await saveTrade(this.env.DB, {
+            trade: r.trade,
+            publicado: false,
+            motivo_rejeicao: r.motivo,
+            redteam_veredito: "rejeitar",
+          });
+        }
+
+        const generatedAt = new Date().toISOString();
+        const provenance = {
+          run_id: s1.runId,
+          model: s2.model,
+          prompt_version: s2.promptVersion,
+          generated_at: s2.generatedAt,
+        };
+
+        const morningCall = buildMorningCall({
+          runId: s1.runId,
+          tradeDate: s1.tradeDate,
+          generatedAt,
+          raw: s2.raw,
+          trades: published,
+          provenance,
+        });
+
+        const validation = validateMorningCall(morningCall, {
+          crossCheck: gates.crossCheck,
+          correlacionados: gates.correlacionados,
+        });
+
+        const r2Key = `morning-call/${s1.tradeDate}/${s1.runId}.json`;
+        if (this.env.REPORTS) {
+          await this.env.REPORTS.put(r2Key, JSON.stringify(morningCall));
+        }
+
+        await saveReportPointer(this.env.DB, {
+          runId: s1.runId,
+          generatedAt,
+          r2Key,
+          regime: morningCall.abertura.regime,
+          vies: morningCall.abertura.vies,
+          conviccao: morningCall.abertura.conviccao,
+          nTrades: published.length,
+          aprovado: validation.aprovado && gates.ok,
+          payload: {
+            morningCall,
+            validation,
+            gateReasons: gates.reasons,
+            agenda: s2b.agenda,
+          },
+        });
+
+        const status =
+          s1.faltantes.length > 0 || !validation.aprovado || !gates.ok ? "partial" : "ok";
+        await finishRun(this.env.DB, s1.runId, status, s1.faltantes, generatedAt);
+
+        // push resumo macro para Radar Quant
+        if (this.env.RADAR_QUANT_INGEST_URL) {
+          const ingestUrl = `${this.env.RADAR_QUANT_INGEST_URL.replace(/\/+$/, "")}/api/ingest/macro-summary`;
+          try {
+            const summary = buildMacroSummary(morningCall);
+            await fetch(ingestUrl, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "x-ingest-secret": this.env.RADAR_QUANT_INGEST_SECRET ?? "",
+              },
+              body: JSON.stringify(summary),
+            });
+          } catch (err) {
+            console.log(
+              JSON.stringify({
+                event: "workflow_macro_push_error",
+                error: err instanceof Error ? err.message : "desconhecido",
+                runId: s1.runId,
+              }),
+            );
+          }
+        }
+
+        return {
+          publishedCount: published.length,
+          rejectedCount: rejected.length,
+          aprovado: validation.aprovado,
+        };
+      });
+
+      console.log(
+        JSON.stringify({
+          event: "workflow_done",
+          runId: s1.runId,
+          published: s3.publishedCount,
+          rejected: s3.rejectedCount,
+          aprovado: s3.aprovado,
+        }),
+      );
 
       return {
-        publishedCount: published.length,
-        rejectedCount: rejected.length,
-        aprovado: validation.aprovado,
-      };
-    });
-
-    console.log(
-      JSON.stringify({
-        event: "workflow_done",
+        aborted: false,
         runId: s1.runId,
-        published: s3.publishedCount,
-        rejected: s3.rejectedCount,
-        aprovado: s3.aprovado,
-      }),
-    );
-
-    return {
-      aborted: false,
-      runId: s1.runId,
-      publishedCount: s3.publishedCount,
-      rejectedCount: s3.rejectedCount,
-    };
+        publishedCount: s3.publishedCount,
+        rejectedCount: s3.rejectedCount,
+      };
+    } catch (err) {
+      // O motor de Workflows ja teria marcado a instancia como "errored" sozinho quando os
+      // retries de um step se esgotam (padrao: 5 tentativas) - este catch nao muda esse
+      // desfecho, so evita que a run fique presa em D1 como "running" para sempre enquanto a
+      // instancia real ja morreu. runId pode nao existir ainda (o proprio step 1 pode ser o
+      // que falhou), entao a busca e por tradeDate, que e conhecido desde o topo do metodo e
+      // e UNIQUE em runs. Rethrow no final: quem decide o destino da instancia continua sendo
+      // o motor de Workflows, isto aqui so mantem o D1 honesto sobre o que aconteceu.
+      const message = err instanceof Error ? err.message : String(err);
+      console.log(JSON.stringify({ event: "workflow_run_failed", tradeDate, error: message }));
+      try {
+        await markRunFailedIfRunning(this.env.DB, tradeDate, new Date().toISOString());
+      } catch (dbErr) {
+        console.log(
+          JSON.stringify({
+            event: "workflow_run_failed_db_error",
+            tradeDate,
+            error: dbErr instanceof Error ? dbErr.message : String(dbErr),
+          }),
+        );
+      }
+      throw err;
+    }
   }
 }
