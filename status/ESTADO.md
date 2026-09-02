@@ -22,6 +22,14 @@ segue sem verificação (item 3 das Pendências abertas), e o Worker remoto
 segue sem a REGRA 6 portada (item 2), então um dia em que o remoto
 reivindicar a corrida a lista de clientes não recebe nada, silenciosamente.
 
+O envio de 02/09 à lista saiu manualmente às 12h40 (28 destinatários, Resend
+`9f2e4c6d-3601-4e2a-ad5d-7ba033801973`), porque a automação entrou depois do
+disparo das 07h daquele dia. O primeiro envio automático de verdade é o de 03/09.
+
+Existe agora uma skill de encerramento específica deste projeto em
+`.claude/skills/encerrar-sessao/`, com os portões, ponteiros e perguntas de risco
+reais daqui. Ela é delta da skill global, não cópia.
+
 ## Estado do briefing-interno em 2026-08-26: nível determinístico e REGRA 6 sem marcador
 
 O briefing de 26/08 saiu com "IBOV +1.55% a 174577.0" (e SPX a 7677.28),
