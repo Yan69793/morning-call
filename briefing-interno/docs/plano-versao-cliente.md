@@ -1,6 +1,8 @@
 # Plano — Versao Cliente do Briefing Matinal
 
-Data: 2026-08-13. **Status: APROVADO pelo Yan em 2026-08-13.** Este plano descreve como transformar o briefing de material interno em material apto a ir a clientes. A implementacao (fase 2 do cronograma) comeca a partir desta aprovacao.
+Data: 2026-08-13. **Status: APROVADO pelo Yan em 2026-08-13, implementado so em parte.** Este plano descreve como transformar o briefing de material interno em material apto a ir a clientes. A implementacao (fase 2 do cronograma) comeca a partir desta aprovacao.
+
+**Nota de 02/09/2026: o que foi construido diverge deste plano em dois pontos de risco, ambos na secao 4.** O envio a clientes que existe de verdade (`enviar_briefing.py --clientes`, ver `briefing-interno/CLAUDE.md`) manda o MESMO conteudo do briefing interno, com chamada direcional e confianca numerica, para a lista de clientes. Nunca foi construido o "modo cliente" da secao 2/3 abaixo (prompt e validador proprios, sem direcional, causa sempre com fonte). E desde 02/09 o envio roda sem revisao humana, automatico quando a REGRA 6 aprova de primeira, o que contradiz literalmente a linha 50 abaixo ("a aprovacao manual e obrigatoria e nao tem excecao"). Os riscos regulatorio e reputacional que este plano identificou em 13/08 (secao 4) seguem valendo tal como escritos, so que sem a mitigacao que o plano propos para eles. Ver item 1 e item 3 da secao "Pendencias abertas" do `CLAUDE.md` raiz.
 
 ## 1. Estado atual do pipeline (13/08)
 

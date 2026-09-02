@@ -1,11 +1,26 @@
 # Estado do projeto — Morning Call
 
-Última atualização: 2026-08-26 (agente: Claude Code)
+Última atualização: 2026-09-02 (agente: Claude Code)
 
 Leia este arquivo antes de começar qualquer trabalho, seja qual for o agente.
 Atualize a data e os itens abertos ao fechar uma sessão que mudou o estado.
 Não duplique conteúdo do CLAUDE.md nem do README.md: aqui fica só o ponto de
 partida com os ponteiros.
+
+## Estado do briefing-interno em 2026-09-02: envio a clientes automatizado
+
+`run_briefing.ps1` (PASSO 5.8) passou a criar `logs/aprovacao_clientes_<data>.flag`
+sozinho, todo dia útil, quando a REGRA 6 aprova o briefing na tentativa 1 de 3
+(sem reprovação nem correção), e a chamar `enviar_briefing.py --clientes` na
+sequência para a lista de 28 endereços do `.env` do Fechamento. Substitui a
+exigência de ordem direta do Yan a cada dia (desenhos de 13/08 e 24/08).
+Detalhe completo em `briefing-interno/CLAUDE.md`, seção "Decisao de
+02/09/2026", e item 1 da seção "Pendências abertas" deste `CLAUDE.md` raiz.
+
+Dois riscos residuais não fechados por essa mudança: a Resolução CVM 20
+segue sem verificação (item 3 das Pendências abertas), e o Worker remoto
+segue sem a REGRA 6 portada (item 2), então um dia em que o remoto
+reivindicar a corrida a lista de clientes não recebe nada, silenciosamente.
 
 ## Estado do briefing-interno em 2026-08-26: nível determinístico e REGRA 6 sem marcador
 

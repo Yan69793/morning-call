@@ -319,3 +319,17 @@ versão nova, então o item estava fechado. Olhar o lock.
 ## Nota de repetição
 
 Próximo `repeat-run`: reler este arquivo, marcar `RESOLVIDO` o que sumir do código, `ATUALIZADO` o que mudar de forma, `ABERTO` o que seguir igual, e adicionar achados novos como `NOVO`. Os achados de topo desta rodada (MC-021/022, DEPLOY-01/02, W01, B-004) são os primeiros candidatos a mudar de status.
+
+## Nota de atualização (02/09, manhã)
+
+As referências acima a "envio a clientes cancelado" (linha 80) e à pergunta P-04 sobre reativar
+o envio no futuro (linha 306) são registro histórico de 14/08 e 17/08, não o estado atual. A
+pedido do Yan, o envio a clientes foi automatizado em 02/09: `run_briefing.ps1` (PASSO 5.8) cria
+`logs/aprovacao_clientes_<data>.flag` sozinho quando a REGRA 6 aprova de primeira (tentativa 1 de
+3), sem revisão humana diária. Detalhe completo em `briefing-interno/CLAUDE.md` (seção "Decisao de
+02/09/2026") e no item 1 da seção "Pendências abertas" do `CLAUDE.md` raiz, que também registra
+os dois riscos que essa automação não fecha: a Resolução CVM 20 (item 3) segue sem verificação, e
+o Worker remoto (item 2) segue sem a REGRA 6 portada. `briefing-interno/docs/plano-versao-cliente.md`
+tem uma nota equivalente: o plano de 13/08 previa conteúdo sem chamada direcional para clientes e
+aprovação manual sem exceção, nenhum dos dois foi construído, o que saiu foi o mesmo conteúdo
+interno com aprovação agora automática.

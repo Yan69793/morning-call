@@ -273,6 +273,63 @@ if ($exitCode -eq 0) {
 }
 
 # ============================================================
+# PASSO 5.8: envio automatico a clientes (lista do Fechamento)
+# ============================================================
+# Reativado em 02/09/2026 a pedido do Yan. Substitui os dois desenhos
+# anteriores: a aprovacao manual em chat + tarefa avulsa das 10h
+# (Szuchmacher-EnvioClientes, ver run_envio_clientes.ps1, superseded) do
+# teste de 13/08, e a decisao de 14/08 de cancelar o envio a clientes.
+#
+# logs/aprovacao_clientes_<data>.flag deixa de ser criado a mao e passa a
+# ser criado aqui, automaticamente, SO quando $tentativa -eq 1: a REGRA 6
+# aprovou de primeira nesta execucao, sem reprovacao nem correcao. Aprovar
+# na tentativa 2 ou 3 nao cria o flag, e sem flag o enviar_briefing.py
+# --clientes recusa o envio (fail-closed, logica inalterada desde 13/08).
+# A REGRA 6 tem ponto cego documentado (cambio, juro, commodity, vol e acao
+# sem unidade nao sao conferidos, ver status/ESTADO.md de 26/08); exigir
+# tentativa 1 limpa e a salvaguarda que fica no lugar da revisao humana que
+# existia antes.
+#
+# So roda quando o proprio pipeline local gerou e validou o briefing desta
+# execucao ($aprovado -eq $true): no dia em que o Worker remoto reivindica a
+# corrida (JA ENVIADO remoto, acima) este passo nunca e alcancado e nenhum
+# e-mail de cliente sai, porque o remote nao tem a REGRA 6 portada (item 2 da
+# secao "Pendencias abertas" do CLAUDE.md raiz). Continua assim ate essa
+# pendencia fechar.
+#
+# Trava de horario, licao da excecao de 24/08/2026 (ver briefing-interno/
+# CLAUDE.md): a Szuchmacher-BriefingMatinal tem WakeToRun/StartWhenAvailable
+# ligados, entao se o PC estiver desligado as 07h00 o pipeline inteiro roda
+# atrasado quando o PC ligar de novo, gerando um briefing "matinal" a tarde.
+# Isso ja era tolerado para o envio padrao (o Yan aceitou esse atraso para
+# si), mas o desenho de 24/08 registrou explicitamente que "briefing matinal
+# entregue a cliente as 15h00 e pior que nao entregue" e por isso omitiu
+# StartWhenAvailable da tarefa de clientes daquele dia. Aqui nao ha tarefa
+# separada para omitir a flag, entao o horario e checado na hora do envio:
+# passado das 09h, o flag de aprovacao ainda e criado (o portao tecnico foi
+# cumprido) mas o envio a clientes fica pulado, so o Yan recebe o atrasado.
+if ($aprovado -and $tentativa -eq 1) {
+    $flagClientes = Join-Path $LogDir "aprovacao_clientes_${DateTag}.flag"
+    $motivoFlag = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') auto: tentativa 1 de $maxTentativas, REGRA 6 sem reprovacao"
+    Set-Content -Path $flagClientes -Value $motivoFlag -Encoding UTF8
+    Log "PASSO 5.8: aprovacao automatica a clientes concedida (tentativa 1 limpa)."
+
+    if ((Get-Date).Hour -lt 9) {
+        $exitClientes = Run-Python (Join-Path $ScriptRoot 'enviar_briefing.py') @($briefingPath, '--clientes')
+        Log "enviar_briefing.py --clientes exit $exitClientes"
+        if ($exitClientes -eq 0) {
+            Log "CLIENTES OK: envio automatico a lista do Fechamento concluido (ou ja feito hoje)."
+        } else {
+            Log "ERRO: envio automatico a clientes falhou (exit $exitClientes)."
+        }
+    } else {
+        Log "PASSO 5.8: aprovado, mas passou das 09h (execucao atrasada, provavel WakeToRun). Envio a clientes pulado por horario, so o Yan recebe."
+    }
+} else {
+    Log "PASSO 5.8: sem aprovacao automatica a clientes (tentativa $tentativa de $maxTentativas, aprovado=$aprovado). Nada enviado a lista hoje."
+}
+
+# ============================================================
 # PASSO 6: registrar a visao do dia (track record)
 # ============================================================
 # Roda DEPOIS do envio e nao pode derrubar nada. Chamada direcional nao tem

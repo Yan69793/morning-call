@@ -47,11 +47,27 @@ seção "Reconciliação de status" do `PENDENCIAS.md`.
 
 Ordenado por urgência, não por severidade técnica.
 
-1. **Envio a clientes segurado desde 24/08.** O Morning Call passou a ir para 22
-   destinatários em BCC. O envio foi travado no mesmo dia depois que a auditoria achou
-   número de mercado escrito de memória pelo LLM. Critério para religar, três briefings em
-   dias úteis consecutivos passando a REGRA 6 sem intervenção manual. Só então criar o
-   flag `logs/aprovacao_clientes_<data>.flag`, que é ato deliberado e nunca rotina.
+1. **Envio a clientes automatizado desde 02/09.** O critério de religamento do item
+   anterior (três briefings em dias úteis consecutivos passando a REGRA 6 sem
+   intervenção manual) foi cumprido em 28/08, 31/08 e 01/09. A pedido do Yan,
+   `run_briefing.ps1` (PASSO 5.8) passou a criar o flag `logs/aprovacao_clientes_<data>.flag`
+   sozinho, todo dia útil, sempre que a REGRA 6 aprovar o briefing de primeira (tentativa 1
+   de 3, sem reprovação nem correção), e a disparar `enviar_briefing.py --clientes` na
+   sequência, para a lista de 28 endereços do `.env` do Fechamento. O antigo portão de
+   aprovação manual em chat (ato deliberado, nunca rotina) foi substituído por essa
+   checagem automática, não existe mais aprovação humana diária no caminho.
+
+   Dois riscos residuais ficam mais relevantes agora que o envio é rotina, não teste
+   pontual. A REGRA 6 tem ponto cego documentado (câmbio, juro, commodity, vol e ação sem
+   unidade não são conferidos, ver `status/ESTADO.md` de 26/08), e a exigência de
+   tentativa 1 limpa é a única salvaguarda que sobrou no lugar da revisão humana. E o item
+   2 abaixo (remote sem REGRA 6) passa a significar que, num dia em que o Worker remoto
+   reivindicar a corrida, a lista de clientes não recebe nada naquele dia, silenciosamente,
+   sem alerta dedicado (o watchdog das 07h20 só cobre o envio padrão ao Yan).
+
+   A pergunta do item 3 abaixo (Resolução CVM 20) segue sem resposta. O Yan decidiu
+   prosseguir com o envio mesmo assim; é decisão dele como operador, não uma checagem que
+   o agente fez ou pôde fazer.
 
 2. **O Worker de reserva ficou para trás do portão numérico.** Achado em 24/08, e é
    consequência direta da correção do mesmo dia ter tocado só um dos dois caminhos.

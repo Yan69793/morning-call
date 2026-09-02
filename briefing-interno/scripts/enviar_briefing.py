@@ -724,9 +724,13 @@ def main(argv: list[str]) -> int:
         return 4
 
     if clientes:
-        # Modo clientes (14/08, teste de um dia aprovado pelo Yan):
+        # Modo clientes (14/08, desenho original; automatizado em 02/09):
         # so envia com o flag de aprovacao do dia, para a lista do
-        # Fechamento em BCC real. Falha fechada, sem excecao.
+        # Fechamento em BCC real. Falha fechada, sem excecao. Ate 19/08 o
+        # flag era criado a mao (Yan aprovava em chat); desde 02/09,
+        # run_briefing.ps1 (PASSO 5.8) cria o flag sozinho quando a REGRA 6
+        # aprova de primeira (tentativa 1 de 3, sem reprovacao). Esta
+        # checagem nao sabe nem precisa saber quem criou o flag, so que ele existe.
         flag = LOG_DIR / f"aprovacao_clientes_{data_tag}.flag"
         if not flag.exists():
             print("SEM APROVACAO: envio a clientes abortado. Crie o flag de aprovacao.", file=sys.stderr)

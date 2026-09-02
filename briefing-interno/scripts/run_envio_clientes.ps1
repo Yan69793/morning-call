@@ -1,4 +1,13 @@
 # run_envio_clientes.ps1, disparo unico das 10h00 do dia 14/08/2026.
+#
+# SUPERSEDED em 02/09/2026: o envio a clientes passou a rodar dentro do
+# proprio run_briefing.ps1 (PASSO 5.8), logo apos o envio padrao das 07h00,
+# com aprovacao automatica quando a REGRA 6 aprova de primeira. Nenhuma
+# tarefa do Agendador chama mais este script (Szuchmacher-EnvioClientes se
+# autorremoveu em 19/08 e nao foi recriada); ele fica so como registro do
+# desenho original de aprovacao manual em chat + tarefa avulsa das 10h. Nao
+# recriar essa tarefa sem antes decidir voltar de proposito a esse desenho.
+#
 # Envia o briefing aprovado do dia para a lista de clientes do Fechamento
 # de Mercado, em BCC real. Sem o flag de aprovacao em
 # logs/aprovacao_clientes_<data>.flag, NADA sai (falha fechada).

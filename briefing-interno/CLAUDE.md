@@ -182,6 +182,10 @@ PENDENCIA de 13/08, RESOLVIDA no mesmo dia as 12h55: o WakeToRun da `Szuchmacher
 
 ## Decisao de 14/08/2026: envio a clientes cancelado, briefing sai sempre e apenas para o Yan
 
+**REVOGADA em 02/09/2026.** O cancelamento permanente descrito nesta secao nao
+vale mais, ver secao "Decisao de 02/09/2026: envio a clientes automatizado"
+mais abaixo. Historico preservado como estava escrito em 14/08.
+
 O teste de um dia nao chegou a acontecer: o briefing das 07h00 de 14/08 reprovou no portao (REGRA 5, drift prompt x validador, corrigido no mesmo dia) e a task `Szuchmacher-EnvioClientes` das 10h00 saiu com `SEM APROVACAO` e se auto-removeu, como projetado. O fail-closed funcionou.
 
 Na mesma tarde o Yan decidiu: **o briefing nao vai mais para clientes, sempre e apenas para ele**. O teste de um dia fica cancelado de forma permanente. O que isso significa em codigo:
@@ -310,6 +314,42 @@ leitura de mercado equivocada, passa direto.
 
 A decisao de 14/08 segue como padrao geral: envio a clientes exige ordem direta
 do Yan a cada vez. O que mudou aqui foi so o momento da aprovacao, nao a regra.
+
+## Decisao de 02/09/2026: envio a clientes automatizado, revoga a ordem a cada vez
+
+A frase final da secao acima ("envio a clientes exige ordem direta do Yan a
+cada vez") deixou de valer. O criterio de religamento citado na secao
+"Pendencias abertas" do CLAUDE.md raiz (tres briefings em dias uteis
+consecutivos aprovados pela REGRA 6 sem intervencao manual) foi cumprido em
+28/08, 31/08 e 01/09. A pedido do Yan em chat, `run_briefing.ps1` (PASSO 5.8)
+passou a criar `logs/aprovacao_clientes_<data>.flag` sozinho, todo dia util,
+sempre que a REGRA 6 aprovar o briefing na tentativa 1 de 3 (sem reprovacao
+nem correcao), e a chamar `enviar_briefing.py --clientes` na sequencia.
+
+Terceiro desenho do mesmo mecanismo, para nao confundir com os dois
+anteriores:
+
+- 13/08: Yan le o e-mail das 07h, aprova em chat, Claude cria o flag,
+  tarefa avulsa das 10h envia (`Szuchmacher-EnvioClientes`, disparo unico).
+- 24/08 (excecao acima): Yan pre-autoriza as cegas, flag criado as 03h5x
+  antes do briefing existir, mesma tarefa avulsa, unica salvaguarda e a
+  revalidacao interna do `enviar_briefing.py`. Nao chegou a enviar (sem
+  `sent_clientes_20260824.flag` em disco).
+- 02/09 (este): sem revisao humana em nenhum momento, nem antes nem depois
+  de gerar. A unica salvaguarda tecnica e mais estrita que as duas
+  anteriores, tentativa 1 limpa, nenhuma correcao no meio. Sem tarefa
+  separada, roda dentro do proprio `run_briefing.ps1`, com trava de horario
+  (antes das 09h) para nao repetir o problema de entrega atrasada que o
+  desenho de 24/08 evitou com `StartWhenAvailable` omitido.
+
+`run_envio_clientes.ps1` fica como registro do desenho de 13/08 e 24/08,
+sem tarefa do Agendador chamando ele. Nao recriar a tarefa das 10h sem
+decidir de proposito voltar a exigir aprovacao humana.
+
+O que isso NAO resolve: a Resolucao CVM 20 (item 3 da secao "Pendencias
+abertas" do CLAUDE.md raiz) segue sem verificacao, e o Worker remoto segue
+sem a REGRA 6 portada (item 2 da mesma secao), entao um dia em que o remoto
+reivindicar a corrida a lista de clientes nao recebe nada, silenciosamente.
 
 ## Envio avulso para outro destinatario
 
