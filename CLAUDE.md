@@ -95,24 +95,16 @@ Ordenado por urgência, não por severidade técnica.
    Decisão do operador, não do agente.
 
 4. **Quarenta e sete itens abertos e confirmados no `PENDENCIAS.md`.** Os que mais pesam.
-   MC-002 e MC-013, a pipeline duplicada em `src/orchestrator/run.ts` continua viva com
-   204 linhas de teste cobrindo código que não roda em produção, enquanto o Workflow real
-   não tem teste de integração. MC-017, nenhum fetch em `src/data/` tem timeout, um
-   provider pendurado trava o cron. RQ-16, o worker do radar-quant não tem uma linha de
-   log estruturado. RQ-28 e RQ-29, `signals:latest` e os contadores de cota seguem em
-   read-modify-write cego no KV, duas gerações concorrentes perdem entrada em silêncio.
-   MC-019, a tabela `agent_calls` existe e nada escreve nela, então não há custo por
-   agente.
+   MC-017, nenhum fetch em `src/data/` tem timeout, um provider pendurado trava o cron. RQ-16, o worker do radar-quant não tem uma linha de log estruturado. RQ-28 e RQ-29, `signals:latest` e os contadores de cota seguem em read-modify-write cego no KV, duas gerações concorrentes perdem entrada em silêncio. MC-019, a tabela `agent_calls` existe e nada escreve nela, então não há custo por agente.
+   *Nota: MC-002 e MC-013 (pipeline duplicada em `src/orchestrator/run.ts`) resolvidos em 16/09 — `run.ts` + `run.test.ts` deletados, pipeline única em `workflow.ts`.*
 
 5. **Um teste do remote falha por drift de artefato, não por bug.** A suíte própria do
    `briefing-interno/remote/` (`npm test` lá dentro, não entra no `npm test` da raiz) tem
    34 casos, 33 passam. O que falha é `buildUserPrompt bate byte a byte com o Python`.
-
    Ele lê `Site/site-producao/agenda-data.json`, arquivo vivo, e compara contra uma
    fixture congelada em 18/08. A agenda andou, então a fixture não bate mais. Diferença
    localizada na posição 15387, onde o esperado tem os eventos de 18/08 e a execução atual
    produz "NENHUM evento confirmado para hoje".
-
    Verificado que é anterior às mudanças de 24/08, mesma contagem com e sem elas, medido
    com `git stash`. Mesma classe do achado Q02, teste acoplado a artefato vivo. O conserto
    é congelar a agenda numa fixture própria, não regenerar o esperado, que só empurra o
@@ -131,6 +123,13 @@ Ordenado por urgência, não por severidade técnica.
    `gravar_visao.py`. O comparador contra o realizado só faz sentido com série, alvo de 30
    dias úteis em `briefing-interno/visao/`. Construir antes é gerador de relatório sem nada
    para relatar.
+
+9. **Cadeia nova do Morning Call: retry 402 + desfecho falha terminal implementados (commits locais), watchdog pronto; deploy pendente (18/09).** 
+   - **Retry 402** (`t_7d50428e` / commit `9560990`): retry com N do provedor no erro 402 do OpenRouter (reserva de `max_tokens` excede saldo). Variável `STRATEGIST_MAX_TOKENS` por env torna teto do strategist configurável sem deploy. Gate verde: 361 testes, typecheck 0, lint 0 (escopo próprio).
+   - **Desfecho falha terminal** (`t_08bd0538` / commit `7d4bdd3`): helper `passoCritico(step, nome, db, tradeDate, fn)` em `workflow.ts` aplicado a init-snapshot, strategist, gates-report; `fecharRunComoFalha` chama `markRunFailedIfRunning` em toda tentativa falha e rethrow. RED provado contra `9560990` (falha `expected [] to have a length of 7 but got +0` + `passoCritico is not a function`); verde com 6 testes novos (377 total). Commit local, sem push, sem deploy, sem migration.
+   - **Watchdog** (`t_e4fe0569`): `watchdog.ps1` (kanban + e-mail, idempotente, PS 5.1), `register-watchdog-task.ps1` (Task Scheduler 07:15 BRT dias úteis), 3 arquivos de teste. Requisitos W1-W7 atendidos. Script de registro da task criado mas não executado (ação manual pendente).
+   - **Pendente de ação do operador:** deploy de produção (`npx wrangler deploy` em `apps/morning-call`), push dos commits `9560990` e `7d4bdd3` para `origin`, execução de `register-watchdog-task.ps1`. Validação em produção (D1, Workflows) não medida — proibido nos cartões. Cron de 06:30 ainda roda versão `a6ef6188` (deploy 16/09 era `4d6144c3` mas cadeia nova não incluída).
+   Detalhe completo em `status/ESTADO.md` seção "Estado do Morning Call após os cartões t_7d50428e, t_e4fe0569, t_08bd0538 (18/09/2026)".
 
 ### Fechadas em 2026-08-24
 

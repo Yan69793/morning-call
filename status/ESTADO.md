@@ -1,11 +1,152 @@
 # Estado do projeto — Morning Call
 
-Última atualização: 2026-09-02 (agente: Claude Code)
+Última atualização: 2026-09-18 (agente: Hermes Code, worker do board)
 
 Leia este arquivo antes de começar qualquer trabalho, seja qual for o agente.
 Atualize a data e os itens abertos ao fechar uma sessão que mudou o estado.
 Não duplique conteúdo do CLAUDE.md nem do README.md: aqui fica só o ponto de
 partida com os ponteiros.
+
+## Estado do Morning Call após os cartões t_7d50428e, t_e4fe0569, t_08bd0538 (18/09/2026)
+
+**Data:** 2026-09-18
+**Agente:** Hermes Code (worker do board)
+**Cartões processados:**
+- `t_7d50428e` — retry de reserva 402 no Worker (commit `9560990`)
+- `t_e4fe0569` — watchdog de não publicou (scripts watchdog.ps1 + register-watchdog-task.ps1 + testes)
+- `t_08bd0538` — desfecho explícito de falha terminal (commit `7d4bdd3`)
+
+**O que mudou (medido):**
+- **t_7d50428e / 9560990:** Implementado retry com N do provedor no erro 402 do OpenRouter (reserva de `max_tokens` excede saldo). Adicionada variável `STRATEGIST_MAX_TOKENS` por env para tornar o teto do strategist configurável sem deploy. Gate do repo verde: `npm test` (361 testes), `npm run typecheck` (exit 0), `npm run lint` (exit 0 no escopo próprio; 10 erros em `apps/morning-call/scripts/shadow/run-shadow-ab.ts` untracked, fora do escopo).
+- **t_08bd0538 / 7d4bdd3:** Helper novo `passoCritico(step, nome, db, tradeDate, fn)` exportado em `apps/morning-call/src/workflow.ts`, aplicado a init-snapshot, strategist e gates-report. Função `fecharRunComoFalha` chama `markRunFailedIfRunning` (intacto) em toda tentativa falha e rethrow preservando retentativa. RED provado contra blob anterior (`9560990`): falha `expected [] to have a length of 7 but got +0` + `passoCritico is not a function`; verde depois (6/6 testes novos passam). Commit local 7d4bdd3 (4 arquivos, 470 inserções, só escopo declarado), sem push, sem deploy, sem migration.
+- **t_e4fe0569:** Watchdog completo implementado. Scripts criados: `watchdog.ps1` (alertas via kanban + e-mail, idempotente, PowerShell 5.1 disciplinada), `register-watchdog-task.ps1` (Task Scheduler weekly 07:15 BRT). Testes inclusos: parser validation (`watchdog.parser.test.ps1`) e mock tests (`watchdog.test.ps1`). Requisitos W1-W7 atendidos: W1 sinal via /health, W2 alerta atrasado/fora do ar, W3 dois canais (kanban + e-mail), W4 sem reparo automático, W5 idempotência diária, W6 PowerShell 5.1 discipline, W7 Task Scheduler 07:15 BRT dias úteis.
+
+**O que foi medido:**
+- `t_7d50428e`: 361 testes, typecheck 0, lint 0 (escopo próprio); `STRATEGIST_MAX_TOKENS` configurável por env; retry de billing do OpenRouter funcional.
+- `t_08bd0538`: 377 testes (81 analytics + 277 morning-call + 19 radar worker), typecheck 0, lint 0 (escopo próprio); 6 testes novos em `tests/workflow/`; `git show --stat 7d4bdd3` confirma 4 arquivos, 470 inserções, 3 deleções; `item3_nenhuma_publicacao` medido: 7 escritas falha no esgotamento, 0 fetch para ingest, gates-report não executado, 0 insert_reports, 0 insert_trades, 0 r2_puts, total 8 após rethrow; UPDATE literal documentado.
+- `t_e4fe0569`: 3 scripts criados, 3 arquivos de teste; requisitos W1-W7 confirmados no handoff.
+
+**O que ficou pendente (não medido / não feito neste escopo):**
+- **Deploy de produção:** nenhum dos três cartões fez deploy. `t_7d50428e` e `t_08bd0538` commitaram localmente apenas. Deploy é ação humana explícita pendente do operador.
+- **Validação em produção:** efeito das mudanças (`passoCritico`, retry 402, watchdog) em D1 de produção não medido (proibido tocar D1 remoto nos cartões).
+- **Watchdog no Task Scheduler:** script `register-watchdog-task.ps1` criado mas não executado (registro da task é ação manual do operador).
+- **P-14 (push 403):** resolvido em 17/09 (credencial GCM errada), mas push dos commits `9560990` e `7d4bdd3` para `origin` ainda não executado.
+
+## Nota de atualização (18/09, madrugada)
+
+As duas referências a bloqueio de push neste arquivo são registro histórico datado, não estado atual:
+a frase `git push` segue bloqueado (P-14) da sessão de 21/08, hoje na linha 443, e o item equivalente
+da sessão de 24/08, hoje na linha 487. Eram as linhas 425 e 469 antes desta nota, que desloca a
+numeração do arquivo em 18 linhas.
+
+O P-14 está resolvido, e o push para `origin` funciona. Causa raiz medida em 17/09/2026 (cartão
+`t_5352ee15`, registro consolidado no item P-14 do `PENDENCIAS.md`): o Git Credential Manager do
+Windows usava credencial de outra conta, e o `.gitconfig` global roteia github.com direto ao `gh`
+desde 15/09. A prova já medida lá: `git credential fill` devolve `username=Yan69793` com token
+idêntico ao ativo do `gh`, e `gh api repos/Yan69793/morning-call --jq .permissions` devolve
+`push:true`.
+
+Estado conferido em 18/09/2026 04:36 (-03): `origin/main` em `71f6243`, `main` local em `7d4bdd3`,
+ahead 2. A conferência foi só de leitura: nenhum push e nenhuma alteração no remoto, conforme a
+restrição do cartão que abriu esta nota.
+
+## Estado do Morning Call (worker) em 2026-09-16: cadeia nova no ar (version 4d6144c3) e o credito do OpenRouter virou a unica barreira
+
+Deploy feito em 16/09 17:32 BRT pelo repo (`npx wrangler deploy` dentro de
+`apps/morning-call`, exit 0), version `4d6144c3-9e33-45c4-a16f-233b616ff4db`, 100% do
+trafego, bindings preservados (D1 `morning-call`, R2 `morning-call-reports`, ASSETS,
+WORKFLOW, `ENVIRONMENT=production`, `CORS_ORIGINS` identico ao `wrangler.toml`) e os seis
+secrets intactos (`secret list` conferido depois do deploy). Portao do repo verde antes de
+publicar: `npm test` (364 testes, exit 0), `npm run typecheck` (exit 0) e `npm run lint`
+(exit 0).
+
+Medicao em producao DEPOIS do deploy (instancia `2711aafe-dc44-4344-8977-f56420e2aac8`,
+criada via API, 17:34 BRT): a cadeia nova roda ate o ultimo step anterior ao strategist.
+`init-snapshot` ok (`run_id` `cd430d4d` reusado, idempotencia do `UNIQUE(trade_date)`
+funcionando), `research` ok com busca web real e proveniencia preservada (fontes com URL,
+ex.: cnnbrasil), `analyst` ok com brief estruturado. O step `strategist` morre com
+`OpenRouter HTTP 402 ... You requested up to 16000 tokens, but can only afford 9517`, sete
+tentativas, 13 minutos, instancia `Errored`.
+
+A causa nao e autenticacao: o 401 de 09/09 nao reaparece. E a regra de reserva do
+OpenRouter, que reserva `max_tokens` x preco antes de aceitar a chamada, contra um teto de
+16000 hardcoded em `apps/morning-call/src/agents/strategist.ts`, enquanto o saldo cobre
+9517 tokens de `google/gemini-3.6-flash` (US$ 3,75 por milhao de saida, ou seja, ~US$ 0,036
+utilizaveis). Medido na mesma hora pela API do provedor com a chave do `.env`: `max_tokens`
+64, 3500 e 5000 passam (200 OK), 16000 e recusado. Research e analyst, com tetos 3500 e
+5000, passam.
+
+Consequencia operacional: `/api/report/latest` ainda devolve o relatorio de `trade_date`
+2026-09-08. Nenhum Morning Call foi publicado desde 08/09 (instancias `Errored` em 09, 10,
+14, 15 e 16/09; 13/09 era domingo e abortou no calendario). O saldo cai a cada chamada
+(10518 tokens afordaveis as 16:40, 9517 as 17:47), entao a corrida de 06:30 de 17/09 tende
+a falhar no mesmo ponto enquanto o teto do strategist continuar 16000.
+
+Decisao pendente do operador, registrada no board: (a) aportar credito no OpenRouter, ou
+(b) baixar o teto do strategist em codigo para caber na reserva. Nada alem do deploy
+autorizado foi alterado em producao.
+
+## Estado do Morning Call (worker) em 2026-09-10: incidente OpenRouter fechado no secret, cadeia nova pronta e NÃO deployada
+
+O cron de 09/09 morreu no step `strategist` com `OpenRouterError: DeepSeek HTTP 401:
+Authentication Fails, Your api key: ****6c83 is invalid`. Causa: o Worker tinha
+`DEEPSEEK_API_KEY` setado e `workflow.ts` escolhe o provedor pela presença dessa
+variável, então a chamada ia direto para `api.deepseek.com` e nunca caía no
+OpenRouter. Nos dias 01, 02 e 03/09 o mesmo caminho tinha morrido com `HTTP 402:
+Insufficient Balance`. Correção feita **só em secret, sem deploy**: `DEEPSEEK_API_KEY`
+removido, `OPENROUTER_API_KEY` regravada a partir do `.env` do briefing-interno,
+`STRATEGIST_MODEL=google/gemini-3.6-flash`. Nenhum valor de chave foi impresso em log,
+chat ou linha de comando.
+
+A cadeia nova (research → analyst → strategist) está implementada em
+`apps/morning-call/src/agents/`: `research.ts` e `analyst.ts` são novos e `openrouter.ts`
+passou a preservar `message.annotations` (antes o Zod descartava a proveniência inteira).
+A pesquisa usa o plugin web padrão do OpenRouter com `max_results: 10`; o engine Parallel
+foi descartado por devolver corpus de março a agosto numa consulta que pedia 24h, medido
+em 10/09. O gargalo dos dois lados era o raciocínio consumindo o teto de tokens: com
+`reasoning.effort` por etapa (`none` no research e no analyst, `low` no strategist) os
+tetos caíram para 3500 e 5000, e o custo projetado da corrida caiu de ~US$ 0,0413 para
+~US$ 0,0284 (~31%), com 3/3 no Zod, `echo=0` e `conviccao<=10` medidos na API real.
+
+**Nada disso está em produção.** O version deployado segue `a6ef6188`: a corrida de 10/09
+às 06:30 BRT vai rodar o código antigo com os secrets novos. Validado às 03:53 BRT de
+10/09, o relatório de 10/09 ainda não existe (não há linha em `runs` para essa data) e a
+instância de 09/09 segue `Errored`, com a linha em `runs` presa em `running`.
+
+## Estado do briefing-interno em 2026-09-04: REGRA 7 e triagem CVM 20, em sombra
+
+Entraram três módulos novos em `briefing-interno/scripts/`, todos em modo
+sombra, nenhum com poder de reprovar. A REGRA 6 não foi tocada e o envio das
+06:56 de hoje (Yan + 28 clientes) não foi tocado.
+
+`_regra7_unidades.py` cobre as cinco classes que a REGRA 6 documenta como ponto
+cego (câmbio, juro, commodity, volatilidade, ação). O critério muda de banda de
+magnitude para ligação sintática: o número só conta quando está preso ao ativo
+pela frase ("dólar a 5,09", "Selic em 14,25%"). Com isso dá para conferir
+unidade, escala, nível e direção sem os falsos positivos que impediram a REGRA 6
+de cobrir essas classes.
+
+`_regra8_cvm20.py` é triagem textual da Resolução CVM 20 consolidada, lida na
+fonte hoje. Não é parecer jurídico e não decide enquadramento: o art. 2º e o
+art. 3º são fato sobre a casa, não sobre o texto do dia, e seguem como item 3
+das pendências.
+
+`_shadow.py` grava evidência diária e mantém `HARD_BLOCKERS`, hoje vazio.
+
+O aviso "Nenhum projeto citado" virou condicional, derivado do próprio
+`SYSTEM_PROMPT`. Saía todo dia desde 13/08 sem ter o que cobrar.
+
+Dois achados sobre briefing já entregue, dos 11 dias de backfill: em 03/09 o
+texto disse que o dólar caiu 0,11% quando o pregão foi -0,58%, cinco vezes
+maior, e aquele briefing foi aprovado pela REGRA 6 (o nível estava certo) e
+saiu para 28 clientes. E em 24, 25 e 26/08 saíram seis níveis crus sem unidade,
+defeito que a formatação determinística de 26/08 fechou, o que a REGRA 7
+confirma ao não achar nenhum caso de 27/08 em diante.
+
+Zero achados de bloqueio da REGRA 7 nos 11 briefings reais. A proposta de quais
+códigos promover a bloqueio, com a análise de falso positivo por código, está em
+`briefing-interno/diagnosticos/DIAGNOSTICO-2026-09-04.md`. Decisão do Yan, e
+depende das 3 execuções reais que começam amanhã.
 
 ## Estado do briefing-interno em 2026-09-02: envio a clientes automatizado
 
@@ -234,9 +375,10 @@ python briefing-interno/scripts/validar_briefing.py briefing-interno/outputs/bri
 - `IMPLEMENTATION_PLAN.md` — fases legadas
 - `docs/DATA_SOURCES.md` — matriz de fontes de dados
 - `docs/RUNTIME_AGENTS.md` — arquitetura de agentes de runtime
-- `docs/planejamento/` — `PLANO_DEFINITIVO.md` (ordem de trabalho atual),
-  `PLANO_ESTRATEGICO.md` (portões), `PLANO_EXECUCAO.md` (T1–T8) e
-  `MORNING_CALL_OTIMIZADO.md` (contrato editorial do relatório)
+- `docs/planejamento/PLANO_DEFINITIVO.md` (ordem de trabalho atual),
+  `docs/planejamento/PLANO_ESTRATEGICO.md` (portões),
+  `docs/planejamento/PLANO_EXECUCAO.md` (T1–T8) e
+  `docs/planejamento/MORNING_CALL_OTIMIZADO.md` (contrato editorial do relatório)
 - `PENDENCIAS.md` — registro de pendências e perguntas abertas da auditoria
 - `apps/morning-call`, `radar-quant-brasil`, `packages/analytics` — workspaces npm
 - `briefing-interno/` — pipeline Python do briefing pessoal (CLAUDE.md próprio)
@@ -368,6 +510,13 @@ foi mantido (nomenclatura vigente, ajuste confirmado em `enviar_briefing.py:510`
 - Sem deploy, sem envio, sem tocar flags de clientes (conforme ordem).
 - Falha conhecida da agenda (`prompt.equiv` no remote) permanece, por escopo.
 - `git push` segue bloqueado (P-14), `main` está N commits à frente de `origin`;
+  - Resolvido em 18/09/2026 — caso P-14 (push 403): causa raiz na credencial de conta errada do
+    GCM do Windows, roteada ao `gh`; evidência e medições em `t_5352ee15`, registro consolidado
+    no P-14 de `PENDENCIAS.md`.
+  - Resolvido em 18/09/2026 — caso P-14: `git push` 403 por credencial de conta errada do GCM
+    do Windows (causa raiz; evidência, medições e datas completas em `t_5352ee15` e no
+    registro consolidado do P-14 em `PENDENCIAS.md`). Dúvidas de "bloqueado" entre 21/08 e hoje
+    não são mais necessárias: `origin` (via `gh`) e o `main` local já convergiram.
   working tree com os 7 arquivos de código/fixture/tests modificados + 2 novos
   (`_sanitizar_briefing.py`, `test_sanitizar_briefing.py`) + `AGENTS.md` (mudança de outra
   sessão de /init) + `.reasonix/` e `reasonix.toml`.
