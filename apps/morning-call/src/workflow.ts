@@ -119,6 +119,72 @@ interface Step3Result {
   aprovado: boolean;
 }
 
+/**
+ * Fecha a run como falha quando um dos steps críticos morre, e o faz DENTRO do step, antes do
+ * rethrow. O motor de Workflows pode encerrar a instância no instante em que as retentativas de
+ * um step se esgotam, sem devolver o controle ao `run()` — nesse caminho o catch de topo (segunda
+ * rede, no fim do `run()`) não roda e a linha fica presa em `running` para sempre (achado NEW-02
+ * do diagnóstico de 16/09). Escrever aqui torna o desfecho no D1 independente do que o motor faz
+ * depois do throw. `markRunFailedIfRunning` é `UPDATE` guardado por `status = 'running'`, então
+ * repetir a cada tentativa falha (<= 7 UPDATEs por rodada) é seguro e idempotente: um sucesso
+ * posterior sobrescreve o status via `finishRun`.
+ */
+async function fecharRunComoFalha(
+  db: D1Database,
+  tradeDate: string,
+  nome: string,
+  err: unknown,
+): Promise<void> {
+  const mensagem = err instanceof Error ? err.message : String(err);
+  console.log(
+    JSON.stringify({
+      event: "workflow_run_failed_step",
+      step: nome,
+      tradeDate,
+      error: mensagem.slice(0, 300),
+    }),
+  );
+  try {
+    await markRunFailedIfRunning(db, tradeDate, new Date().toISOString());
+  } catch (dbErr) {
+    // Não substitui o erro original: quem decide o destino da instância continua sendo ele.
+    console.log(
+      JSON.stringify({
+        event: "workflow_run_failed_step_db_error",
+        step: nome,
+        tradeDate,
+        error: dbErr instanceof Error ? dbErr.message : String(dbErr),
+      }),
+    );
+  }
+}
+
+/**
+ * `step.do` dos três steps cuja falha deixa a rodada sem relatório nenhum: `init-snapshot`,
+ * `strategist` e `gates-report`. Sem a saída do strategist não existe regime, viés, convicção nem
+ * trade (ver o caminho de eco logo adiante), então a run tem de fechar como `failed` no instante em
+ * que qualquer um deles esgota as retentativas. O rethrow preserva a retentativa do motor — o
+ * wrapper não engole o erro, só grava o desfecho antes de ele sair. Os steps best-effort
+ * (`research`, `analyst`, `economic-calendar`) engolem o próprio erro e devolvem resultado suave,
+ * logo continuam em `step.do` cru.
+ */
+export async function passoCritico<T extends Rpc.Serializable<T>>(
+  step: WorkflowStep,
+  nome: string,
+  db: D1Database,
+  tradeDate: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  return step.do(nome, async (): Promise<T> => {
+    try {
+      return await fn();
+    } catch (err) {
+      await fecharRunComoFalha(db, tradeDate, nome, err);
+      throw err;
+    }
+  });
+}
+
 export class MorningCallWorkflow extends WorkflowEntrypoint<Env, MorningCallParams> {
   async run(event: WorkflowEvent<MorningCallParams>, step: WorkflowStep) {
     const now = new Date(event.timestamp);
@@ -126,7 +192,7 @@ export class MorningCallWorkflow extends WorkflowEntrypoint<Env, MorningCallPara
 
     try {
       // ── Step 1: init + snapshot ──
-      const s1 = await step.do("init-snapshot", async (): Promise<Step1Result> => {
+      const s1 = await passoCritico(step, "init-snapshot", this.env.DB, tradeDate, async (): Promise<Step1Result> => {
         const session = checkSession(tradeDate);
         if (!session.shouldRunMorningCall) {
           return {
@@ -342,7 +408,7 @@ export class MorningCallWorkflow extends WorkflowEntrypoint<Env, MorningCallPara
           ? { analise: JSON.stringify(s2c.brief, null, 1), fontes: formatarFontes(s2a.fontes) }
           : undefined;
 
-      const s2 = await step.do("strategist", async (): Promise<Step2Result> => {
+      const s2 = await passoCritico(step, "strategist", this.env.DB, tradeDate, async (): Promise<Step2Result> => {
         const strat = await runStrategist({
           snapshot: s1.snapshot,
           apiKey,
@@ -461,7 +527,7 @@ export class MorningCallWorkflow extends WorkflowEntrypoint<Env, MorningCallPara
       });
 
       // ── Step 3: gates + report + push ──
-      const s3 = await step.do("gates-report", async (): Promise<Step3Result> => {
+      const s3 = await passoCritico(step, "gates-report", this.env.DB, tradeDate, async (): Promise<Step3Result> => {
         const { gates, published, rejected } = decidirPublicacao({
           snapshot: s1.snapshot,
           claims: s2.raw.quant_claims ?? [],
