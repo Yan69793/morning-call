@@ -12,6 +12,25 @@ import { Rationale } from "../schemas/common.js";
 
 export const PROMPT_VERSION = "strategist@2026-08-06-v3";
 
+/**
+ * Teto de max_tokens do strategist quando o chamador não injeta outro. Era hardcoded
+ * 8000 em produção desde o início e este é o valor que a produção usa hoje — a variável
+ * `STRATEGIST_MAX_TOKENS` (via workflow) só existe para abaixar o teto sem deploy quando
+ * o crédito da conta não cobre a pré-autorização (402 de reserva).
+ */
+export const STRATEGIST_MAX_TOKENS_PADRAO = 8000;
+
+/**
+ * Lê `STRATEGIST_MAX_TOKENS` do ambiente. Ausente, vazia ou não inteiro positivo = default
+ * (8000). Var inválida não derruba a rodada: o valor volta undefined e o chamador loga
+ * aviso, mesmo contrato de `RESEARCH_MAX_RESULTS`.
+ */
+export function strategistMaxTokensFromEnv(raw?: string): number | undefined {
+  if (!raw) return undefined;
+  const n = Number(raw);
+  return Number.isInteger(n) && n > 0 ? n : undefined;
+}
+
 export const StrategistRaw = z.object({
   abertura: z.object({
     tensao_macro_dominante: Rationale,
@@ -180,7 +199,10 @@ export function buildStrategistJsonSchema(): Record<string, unknown> {
           tensao_macro_dominante: { type: "string" },
           regime: { type: "string", enum: ["goldilocks", "reflacionario", "estagflacionario", "desinflacionario", "recessivo", "risk_on_especulativo", "risk_off_sistemico", "transicao"] },
           vies: { type: "string", enum: ["comprador", "vendedor", "neutro", "long_vol", "short_vol"] },
-          conviccao: { type: "number" },
+          // `minimum`/`maximum` espelham o `.min(0).max(10)` do Zod em StrategistRaw. Sem eles o
+          // schema mandado ao provedor não tinha limite, e o modelo devolveu valores acima de 10 no
+          // benchmark de 10/09: a rodada morria no parse, não no modelo.
+          conviccao: { type: "number", minimum: 0, maximum: 10 },
           premissa_que_sustenta_precos: { type: "string" },
           fato_que_quebraria: { type: "string" },
         },
@@ -276,7 +298,7 @@ export function buildStrategistJsonSchema(): Record<string, unknown> {
               required: ["value", "unit"],
             },
             sizing_pct_orcamento_risco: { type: "number" },
-            conviccao: { type: "number" },
+            conviccao: { type: "number", minimum: 0, maximum: 10 },
             fontes: { type: "array", items: { type: "string" } },
           },
           required: ["nome", "classe", "categoria", "horizonte", "direcao", "entrada", "alvo_1", "alvo_2", "invalidacao", "tese", "erro_precificacao", "catalisador", "por_que_agora", "por_que_nao_consensual", "riscos_ocultos", "plano_saida", "estrutura_alternativa", "correlacao_com_outras", "retorno_potencial", "perda_maxima", "sizing_pct_orcamento_risco", "conviccao", "fontes"],
@@ -452,6 +474,37 @@ export function sealStrategistTrades(raw: StrategistRaw, provenance: Provenance)
   return raw.trades.map((draft) => sealTradeCard(draft, crypto.randomUUID(), provenance));
 }
 
+export interface PesquisaContexto {
+  /** JSON do analyst (BriefAnalisado serializado), já conferido contra as citações. */
+  analise: string;
+  /** Fontes com proveniência, já formatadas com selo de janela (`formatarFontes`). */
+  fontes: string;
+}
+
+/**
+ * Bloco de pesquisa anexado ao prompt do usuário. O estrategista continua closed-book para
+ * números: o snapshot é a única origem de valor citável em `quant_claims`. A pesquisa entra como
+ * contexto narrativo e como lista de fontes permitidas — nunca como cotação.
+ */
+export function buildPesquisaBlock(p: PesquisaContexto): string {
+  return [
+    "",
+    "--- PESQUISA WEB (material externo, fora do snapshot) ---",
+    "As fontes abaixo vieram de busca web e são as ÚNICAS citáveis no campo `fontes` dos trades.",
+    "Nunca invente fonte fora desta lista.",
+    "Os números da pesquisa servem para narrativa. `quant_claims` continua saindo só do snapshot:",
+    "valor externo em quant_claims é reprovado pelo cross-check.",
+    "Fontes marcadas CONTEXTO ou SEM-DATA estão fora da janela de 24h: trate como contexto,",
+    "declare como contexto, nunca como fato do dia.",
+    "",
+    "FONTES:",
+    p.fontes,
+    "",
+    "ANÁLISE ESTRUTURADA (JSON):",
+    p.analise,
+  ].join("\n");
+}
+
 export interface RunStrategistInput {
   snapshot: MarketSnapshot;
   apiKey: string;
@@ -462,6 +515,16 @@ export interface RunStrategistInput {
   mockContent?: string;
   /** se true, usa api.deepseek.com em vez de OpenRouter */
   deepseekApi?: boolean;
+  /** contexto das etapas 1 e 2 (research + analyst). Ausente = rodada closed-book pura. */
+  pesquisa?: PesquisaContexto;
+  /** Esforço de raciocínio pedido ao provedor (`reasoning.effort` no OpenRouter). */
+  reasoningEffort?: string;
+  /**
+   * Teto de max_tokens da chamada. Default `STRATEGIST_MAX_TOKENS_PADRAO` (8000).
+   * O 402 de reserva do OpenRouter gera UM retry automatico com teto menor derivado
+   * do N do corpo; este campo so define o teto da primeira chamada.
+   */
+  maxTokens?: number;
 }
 
 export interface RunStrategistResult {
@@ -491,14 +554,20 @@ export async function runStrategist(input: RunStrategistInput): Promise<RunStrat
           schema: buildStrategistJsonSchema(),
           strict: true,
         },
-        maxTokens: 16000,
+        maxTokens: input.maxTokens ?? STRATEGIST_MAX_TOKENS_PADRAO,
         deepseekApi: input.deepseekApi,
+        ...(input.reasoningEffort ? { reasoning: { effort: input.reasoningEffort } } : {}),
         messages: [
           {
             role: "system",
             content: buildStrategistSystemPrompt({ incluirSchema: input.deepseekApi === true }),
           },
-          { role: "user", content: buildStrategistUserPrompt(input.snapshot) },
+          {
+            role: "user",
+            content:
+              buildStrategistUserPrompt(input.snapshot) +
+              (input.pesquisa ? buildPesquisaBlock(input.pesquisa) : ""),
+          },
         ],
         fetchFn: input.fetchFn,
       })

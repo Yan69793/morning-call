@@ -2,16 +2,20 @@
  * AD-5: Workflow durável. O cron e o endpoint /trigger criam uma instância do Workflow;
  * cada step.do() persiste seu resultado. Se o LLM falhar, retoma do snapshot, não do zero.
  *
- * A pipeline tem 3 steps duráveis:
- *   [1] init-snapshot  — calendário, ensureRun, coleta de dados, persistência inicial
- *   [2] strategist       — chamada LLM (o step mais caro e mais provável de falhar)
- *   [3] gates-report     — validação, persistência final, relatório, push para Radar Quant
+ * A pipeline tem steps duráveis:
+ *   [1]   init-snapshot     — calendário, ensureRun, coleta de dados, persistência inicial
+ *   [2a]  research          — busca web via OpenRouter, proveniência preservada (best-effort)
+ *   [2c]  analyst           — JSON estruturado sobre a pesquisa, sem busca própria (best-effort)
+ *   [2]   strategist        — LLM fechado no snapshot, com o contexto da pesquisa anexado
+ *   [2.5] economic-calendar — agenda do dia (best-effort, não bloqueia)
+ *   [3]   gates-report      — validação, persistência final, relatório, push para Radar Quant
  *
  * Registro: wrangler.toml [[workflows]] + env.WORKFLOW.create()
  */
 import { WorkflowEntrypoint, WorkflowStep, WorkflowEvent } from "cloudflare:workers";
 import type { Env } from "./env.js";
 import { checkSession, todayTradeDateBrt } from "./data/calendar.js";
+import { fetchWithTimeout } from "./data/http.js";
 import { JANELA_CORRELACAO, fetchSeriesBundle } from "./data/series.js";
 import { buildQuantMetrics } from "./quant/build.js";
 import { buildMarketSnapshot, listNdKeys } from "./data/snapshot.js";
@@ -24,7 +28,7 @@ import {
   saveSnapshot,
   saveTrade,
 } from "./db/runs.js";
-import { runStrategist } from "./agents/strategist.js";
+import { runStrategist, strategistMaxTokensFromEnv } from "./agents/strategist.js";
 import { runCalendarAgent } from "./agents/calendar.js";
 import { fetchAgendaEvents } from "./data/agenda/index.js";
 import { decidirPublicacao } from "./committee/decisao.js";
@@ -35,9 +39,53 @@ import type { MarketSnapshot } from "./schemas/data.js";
 import type { TradeCard } from "./schemas/trade.js";
 import type { StrategistRaw } from "./agents/strategist.js";
 import type { EconomicAgenda } from "./schemas/agenda.js";
+import {
+  runResearch,
+  formatarFontes,
+  type FontePesquisada,
+  type FreshnessResumo,
+} from "./agents/research.js";
+import { runAnalyst, type BriefAnalisado } from "./agents/analyst.js";
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface MorningCallParams {}
+
+/**
+ * Modelos default da cadeia nova (10/09/2026). Cada etapa tem variável própria: research e analyst
+ * não podem herdar `STRATEGIST_MODEL` — o benchmark mediu cada etapa com um modelo diferente.
+ */
+const RESEARCH_MODEL_PADRAO = "deepseek/deepseek-v4-flash-0731";
+const ANALYST_MODEL_PADRAO = "deepseek/deepseek-v4-flash-0731";
+const STRATEGIST_MODEL_PADRAO = "google/gemini-3.6-flash";
+
+/**
+ * Esforço de raciocínio por etapa, medido em 10/09/2026. No analyst, `none` tira o pensamento pago
+ * do caminho e libera o teto de tokens; no strategist, `low` manteve 3/3 no Zod com custo menor.
+ */
+const ANALYST_REASONING_EFFORT = "none";
+const STRATEGIST_REASONING_EFFORT = "low";
+
+interface Step2aResult {
+  ok: boolean;
+  motivo?: string;
+  fontes: FontePesquisada[];
+  conteudo: string;
+  modelo: string;
+  freshness: FreshnessResumo;
+  tokensIn?: number;
+  tokensOut?: number;
+  reasoningTokens?: number;
+}
+
+interface Step2cResult {
+  ok: boolean;
+  motivo?: string;
+  brief: BriefAnalisado | null;
+  modelo: string;
+  tokensIn?: number;
+  tokensOut?: number;
+  reasoningTokens?: number;
+}
 
 interface Step1Result {
   aborted: boolean;
@@ -138,9 +186,9 @@ export class MorningCallWorkflow extends WorkflowEntrypoint<Env, MorningCallPara
         return { aborted: true, reason: s1.reason };
       }
 
-      // ── Step 2: strategist (LLM) ──
-      const deepseekKey = this.env.DEEPSEEK_API_KEY;
+      // ── Step 2: cadeia de LLM (research → analyst → strategist) ──
       const openRouterKey = this.env.OPENROUTER_API_KEY;
+      const deepseekKey = this.env.DEEPSEEK_API_KEY;
       const useDeepSeek = Boolean(deepseekKey);
       const apiKey = useDeepSeek ? (deepseekKey ?? "") : (openRouterKey ?? "");
       if (!apiKey) {
@@ -149,17 +197,161 @@ export class MorningCallWorkflow extends WorkflowEntrypoint<Env, MorningCallPara
         return { aborted: false, runId: s1.runId, reason: "API_KEY ausente" };
       }
 
-      const model = useDeepSeek
+      const researchModel = this.env.RESEARCH_MODEL ?? RESEARCH_MODEL_PADRAO;
+      const analystModel = this.env.ANALYST_MODEL ?? ANALYST_MODEL_PADRAO;
+      const strategistModel = useDeepSeek
         ? "deepseek-chat"
-        : (this.env.STRATEGIST_MODEL ?? "anthropic/claude-opus-4-7");
+        : (this.env.STRATEGIST_MODEL ?? STRATEGIST_MODEL_PADRAO);
+
+      // Teto de max_tokens do strategist. Ausente = padrao do strategist (8000).
+      // Var invalida nao derruba a rodada: cai no padrao e loga o aviso.
+      const strategistMaxTokens = strategistMaxTokensFromEnv(this.env.STRATEGIST_MAX_TOKENS);
+      if (this.env.STRATEGIST_MAX_TOKENS && strategistMaxTokens === undefined) {
+        console.warn(
+          JSON.stringify({
+            event: "strategist_max_tokens_invalido",
+            valor: this.env.STRATEGIST_MAX_TOKENS,
+          }),
+        );
+      }
+
+      // ── Step 2a: research (web search default) ──
+      // Exige OPENROUTER_API_KEY: o plugin `web` só existe no OpenRouter e o caminho DeepSeek
+      // direto não tem busca. Sem chave o passo vira best-effort e a rodada segue closed-book.
+      const pesquisaVazia: Step2aResult = {
+        ok: false,
+        motivo: "OPENROUTER_API_KEY ausente",
+        fontes: [],
+        conteudo: "",
+        modelo: "",
+        freshness: {
+          ok: false,
+          naJanela: 0,
+          contexto: 0,
+          indeterminado: 0,
+          total: 0,
+          motivo: "sem pesquisa",
+        },
+      };
+      const s2a = await step.do("research", async (): Promise<Step2aResult> => {
+        if (!openRouterKey) return pesquisaVazia;
+        try {
+          // Teto de resultados da busca web. Ausente = padrao do research (5).
+          // Var invalida nao derruba a rodada: cai no padrao e loga o aviso.
+          const rawMaxResults = Number(this.env.RESEARCH_MAX_RESULTS ?? "");
+          const researchMaxResults =
+            Number.isInteger(rawMaxResults) && rawMaxResults > 0 ? rawMaxResults : undefined;
+          if (this.env.RESEARCH_MAX_RESULTS && researchMaxResults === undefined) {
+            console.warn(
+              JSON.stringify({
+                event: "research_max_results_invalido",
+                valor: this.env.RESEARCH_MAX_RESULTS,
+              }),
+            );
+          }
+          const r = await runResearch({
+            apiKey: openRouterKey,
+            model: researchModel,
+            agoraIso: new Date().toISOString(),
+            ...(researchMaxResults === undefined ? {} : { maxResults: researchMaxResults }),
+          });
+          console.log(
+            JSON.stringify({
+              event: "workflow_research",
+              runId: s1.runId,
+              ok: r.ok,
+              modelo: r.modelo,
+              fontes: r.fontes.length,
+              dominios: new Set(r.fontes.map((f) => f.dominio)).size,
+              freshness: r.freshness,
+            }),
+          );
+          return {
+            ok: r.ok,
+            motivo: r.motivo,
+            fontes: r.fontes,
+            conteudo: r.conteudo,
+            modelo: r.modelo,
+            freshness: r.freshness,
+            tokensIn: r.tokensIn,
+            tokensOut: r.tokensOut,
+            reasoningTokens: r.reasoningTokens,
+          };
+        } catch (err) {
+          // Best-effort, como o calendário: sem pesquisa a rodada perde contexto externo, mas
+          // perde mais ainda se o Morning Call inteiro não sair.
+          const motivo = err instanceof Error ? err.message.slice(0, 300) : "erro desconhecido";
+          console.log(
+            JSON.stringify({ event: "workflow_research_error", runId: s1.runId, error: motivo }),
+          );
+          return { ...pesquisaVazia, motivo };
+        }
+      });
+
+      // ── Step 2c: analyst (JSON estruturado, sem web search) ──
+      const s2c = await step.do("analyst", async (): Promise<Step2cResult> => {
+        if (!openRouterKey || !s2a.ok) {
+          return {
+            ok: false,
+            motivo: s2a.motivo ?? "pesquisa indisponível",
+            brief: null,
+            modelo: "",
+          };
+        }
+        try {
+          const a = await runAnalyst({
+            apiKey: openRouterKey,
+            model: analystModel,
+            fontes: s2a.fontes,
+            pesquisa: s2a.conteudo,
+            reasoningEffort: ANALYST_REASONING_EFFORT,
+          });
+          console.log(
+            JSON.stringify({
+              event: "workflow_analyst",
+              runId: s1.runId,
+              ok: a.ok,
+              modelo: a.modelo,
+              fatos: a.brief?.total_fatos ?? 0,
+              nao_verificaveis: a.brief?.nao_verificaveis ?? 0,
+              motivo: a.motivo,
+            }),
+          );
+          return {
+            ok: a.ok,
+            motivo: a.motivo,
+            brief: a.brief,
+            modelo: a.modelo,
+            tokensIn: a.tokensIn,
+            tokensOut: a.tokensOut,
+            reasoningTokens: a.reasoningTokens,
+          };
+        } catch (err) {
+          const motivo = err instanceof Error ? err.message.slice(0, 300) : "erro desconhecido";
+          console.log(
+            JSON.stringify({ event: "workflow_analyst_error", runId: s1.runId, error: motivo }),
+          );
+          return { ok: false, motivo, brief: null, modelo: "" };
+        }
+      });
+
+      // Contexto entregue ao strategist: análise estruturada + fontes com selo de janela. Sem
+      // analyst aprovado, `undefined`, e a rodada volta a ser closed-book pura.
+      const pesquisa =
+        s2c.ok && s2c.brief
+          ? { analise: JSON.stringify(s2c.brief, null, 1), fontes: formatarFontes(s2a.fontes) }
+          : undefined;
 
       const s2 = await step.do("strategist", async (): Promise<Step2Result> => {
         const strat = await runStrategist({
           snapshot: s1.snapshot,
           apiKey,
-          model,
+          model: strategistModel,
           runId: s1.runId,
           deepseekApi: useDeepSeek,
+          pesquisa,
+          reasoningEffort: STRATEGIST_REASONING_EFFORT,
+          ...(strategistMaxTokens === undefined ? {} : { maxTokens: strategistMaxTokens }),
         });
         return {
           raw: strat.raw,
@@ -206,7 +398,7 @@ export class MorningCallWorkflow extends WorkflowEntrypoint<Env, MorningCallPara
             : (openRouterKeyForCal ?? "");
           const calModel = useDeepSeekForCal
             ? "deepseek-chat"
-            : (this.env.STRATEGIST_MODEL ?? "anthropic/claude-opus-4-7");
+            : (this.env.STRATEGIST_MODEL ?? STRATEGIST_MODEL_PADRAO);
 
           if (!calApiKey) {
             return { agenda: null, agendaError: "API_KEY ausente para calendario" };
@@ -347,7 +539,7 @@ export class MorningCallWorkflow extends WorkflowEntrypoint<Env, MorningCallPara
           const ingestUrl = `${this.env.RADAR_QUANT_INGEST_URL.replace(/\/+$/, "")}/api/ingest/macro-summary`;
           try {
             const summary = buildMacroSummary(morningCall);
-            await fetch(ingestUrl, {
+            const resp = await fetchWithTimeout(ingestUrl, {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
@@ -355,6 +547,15 @@ export class MorningCallWorkflow extends WorkflowEntrypoint<Env, MorningCallPara
               },
               body: JSON.stringify(summary),
             });
+            if (!resp.ok) {
+              console.log(
+                JSON.stringify({
+                  event: "macro_summary_push_failed",
+                  status: resp.status,
+                  runId: s1.runId,
+                }),
+              );
+            }
           } catch (err) {
             console.log(
               JSON.stringify({
