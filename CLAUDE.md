@@ -124,12 +124,14 @@ Ordenado por urgência, não por severidade técnica.
    dias úteis em `briefing-interno/visao/`. Construir antes é gerador de relatório sem nada
    para relatar.
 
-9. **Cadeia nova do Morning Call: retry 402 + desfecho falha terminal implementados (commits locais), watchdog pronto; deploy pendente (18/09).** 
-   - **Retry 402** (`t_7d50428e` / commit `9560990`): retry com N do provedor no erro 402 do OpenRouter (reserva de `max_tokens` excede saldo). Variável `STRATEGIST_MAX_TOKENS` por env torna teto do strategist configurável sem deploy. Gate verde: 361 testes, typecheck 0, lint 0 (escopo próprio).
-   - **Desfecho falha terminal** (`t_08bd0538` / commit `7d4bdd3`): helper `passoCritico(step, nome, db, tradeDate, fn)` em `workflow.ts` aplicado a init-snapshot, strategist, gates-report; `fecharRunComoFalha` chama `markRunFailedIfRunning` em toda tentativa falha e rethrow. RED provado contra `9560990` (falha `expected [] to have a length of 7 but got +0` + `passoCritico is not a function`); verde com 6 testes novos (377 total). Commit local, sem push, sem deploy, sem migration.
-   - **Watchdog** (`t_e4fe0569`): `watchdog.ps1` (kanban + e-mail, idempotente, PS 5.1), `register-watchdog-task.ps1` (Task Scheduler 07:15 BRT dias úteis), 3 arquivos de teste. Requisitos W1-W7 atendidos. Script de registro da task criado mas não executado (ação manual pendente).
-   - **Pendente de ação do operador:** deploy de produção (`npx wrangler deploy` em `apps/morning-call`), push dos commits `9560990` e `7d4bdd3` para `origin`, execução de `register-watchdog-task.ps1`. Validação em produção (D1, Workflows) não medida — proibido nos cartões. Cron de 06:30 ainda roda versão `a6ef6188` (deploy 16/09 era `4d6144c3` mas cadeia nova não incluída).
-   Detalhe completo em `status/ESTADO.md` seção "Estado do Morning Call após os cartões t_7d50428e, t_e4fe0569, t_08bd0538 (18/09/2026)".
+9. **FECHADO em 22/09/2026: cadeia nova deployada, push feito e Morning Call publicando de novo.** O item pedia deploy de produção, push dos commits e execução do `register-watchdog-task.ps1`. Os dois primeiros foram feitos em 22/09, junto da troca de provedor de LLM que destravou a publicação. Ficou aberto só o registro da task do watchdog.
+   - **Retry 402** (`t_7d50428e` / commit `9560990`): pushado.
+   - **Desfecho falha terminal** (`t_08bd0538` / commit `7d4bdd3`): pushado.
+   - **Provedor trocado para a API da OpenAI** (commit `1c0ccb3`): o 402 do OpenRouter não foi resolvido por cota, foi contornado. `chatCompletion` ganhou o tipo `Provedor` e `resolverCadeiaLlm` decide chave, provedor e modelos num lugar só. Deploy `3af4940b-e287-4bf3-9765-1acf42c560b9`, `origin/main` em `44c6c58`. `/api/report/latest` voltou a publicar em 22/09 depois de dez pregões parado desde 08/09.
+   - **Watchdog**: continua criado e não registrado, agora por escolha, porque não há pressa. O fail-open que ele tinha foi resolvido de lado, o `/health` passou a devolver `b3_trading_day` no deploy de 22/09.
+   - Detalhe completo em `status/ESTADO.md` seção "Morning Call publicado de novo em 22/09/2026".
+
+10. **Aberto em 22/09/2026: validador não cobra coerência de escala, e um trade incoerente já foi publicado.** A corrida das 10h06 publicou `comprar_cdi_diaria` com entrada `0.050788 pct` (taxa diária do CDI) e alvos `4.22` e `4.9205 pct` (ordem anual), e passou por todos os portões. O `unidadesBatem` pega unidade diferente, não escala dentro da mesma unidade, e o `validateMorningCall` checa ordenação, proveniência e soma de probabilidades. A corrida seguinte saiu coerente, então o defeito não é estável e nada no relatório distingue os dois casos. Mesma classe apareceu em `sizing_pct_orcamento_risco`, que saiu `25` e `35` numa corrida e `0.35` na outra. Decisão do operador: aceitar, endurecer o validador com faixa de razão por campo mais escala explícita no prompt, ou subir o tier do strategist. Detalhe e números em `status/ESTADO.md`.
 
 ### Fechadas em 2026-08-24
 
