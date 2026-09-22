@@ -54,11 +54,22 @@ limitado a `MAX_TENTATIVAS_CORRECAO = 2`, que devolve ao modelo a lista de probl
 motivo (`problemasDeValidacao`, `buildCorrecaoPrompt`). Erro que não é de validação sobe na hora,
 sem gastar chamada. Evento estruturado `strategist_correcao` marca cada correção.
 
-**Resultado medido.** Corrida de 22/09 pelas 10h06 BRT, instância `32e0f90a-d32e-415c-b2a0-da64f3266bee`,
-todos os seis steps verdes, 2 minutos no total (`strategist` 1 minuto). `/api/report/latest` passou a
-devolver `trade_date` 2026-09-22, `aprovado: true`, `ok: true`, 2 trades, `gateReasons` vazio. Gate do
-repo: 427 testes, typecheck exit 0, lint com os mesmos 10 erros pré-existentes em
+**Resultado medido.** Três corridas em 22/09, todas com os seis steps verdes.
+
+| instância | hora | resultado |
+| --- | --- | --- |
+| `32e0f90a-d32e-415c-b2a0-da64f3266bee` | 10h06 BRT | publicou, 2 trades, `aprovado: true` |
+| `0c6efb74-01c4-4777-86fe-55558bdac54b` | 10h12 BRT | publicou, 1 trade, `aprovado: true` |
+
+A segunda corrida foi disparada de propósito para testar a credencial, já que a chave usada na
+montagem tinha sido exposta em chat. `research-1` e `analyst-1` passaram sem 401, então o secret
+`OPENAI_API_KEY` guarda chave válida e o caminho da OpenAI está de pé. `/api/report/latest` devolve
+`trade_date` 2026-09-22, `aprovado: true`, `ok: true`, `gateReasons` vazio. Gate do repo: 427
+testes, typecheck exit 0, lint com os mesmos 10 erros pré-existentes em
 `apps/morning-call/scripts/shadow/run-shadow-ab.ts`, que é untracked.
+
+Commitado e enviado: `1c0ccb3` (troca de provedor) e `a035d98` (ferramentas locais de medição),
+`origin/main` em `a035d98`.
 
 **Proveniência preservada, com ressalva.** `gpt-5-search-api` pesquisa e devolve anotação, e a
 cadeia montou fontes reais com domínio (exame.com, agenciagov.ebc.com.br, cnnbrasil.com.br,
@@ -68,8 +79,8 @@ publicação, então toda fonte caiu em `janela: "indeterminado"` e o selo de fr
 O `research` também **não** usa `response_format` hoje, o que importa porque o `gpt-5-search-api`
 recusa `json_object` com `not supported with web_search`.
 
-**Defeito de qualidade em aberto, este sim é o que precisa de decisão.** O trade 1 publicado,
-`comprar_cdi_diaria`, tem entrada `0.050788 pct` (a taxa diária do CDI), alvo_1 `4.22 pct`,
+**Defeito de qualidade em aberto, este sim é o que precisa de decisão.** O trade 1 da corrida das
+10h06, `comprar_cdi_diaria`, tem entrada `0.050788 pct` (a taxa diária do CDI), alvo_1 `4.22 pct`,
 alvo_2 `4.9205 pct`, invalidação `0.01` e faixa de `0.050788` a `13.5`. Mistura taxa diária com
 nível anual. Passa pelo validador porque tudo está rotulado `pct` e a ordem dos níveis respeita a
 direção, e passa pelo `validateMorningCall` porque as regras de lá são de ordenação, proveniência e
@@ -78,15 +89,29 @@ não escala dentro da mesma unidade. O terceiro alvo do trade 1 e o do trade 2 s
 `4.9205`, o que sugere ancoragem do modelo num valor do snapshot. Nenhum portão automático pega
 isso, então é decisão do operador: aceitar, endurecer o validador, ou trocar o modelo do strategist.
 
+O defeito não é estável, o que o torna mais traiçoeiro. A corrida das 10h12 saiu com um único trade,
+`vender dolar no estresse`, e ele está coerente ponta a ponta: entrada `5.1117`, alvo_1 `5.0234`,
+alvo_2 `4.9351`, invalidação `5.2`, tudo em `BRL_por_USD` e na mesma escala. Duas amostras, uma
+doente e uma sadia, e nada no relatório diz qual é qual. Apareceu também uma segunda manifestação da
+mesma classe no campo de tamanho: `sizing_pct_orcamento_risco` saiu `25` e `35` na primeira corrida
+e `0.35` na segunda, ou seja diferença de duas ordens de grandeza no mesmo campo, e nenhum portão
+cobra coerência de escala ali. O padrão é claro: quando o prompt não fixa a escala de um campo
+numérico, o modelo escolhe uma livremente, e ordenação e unidade não pegam isso.
+
 **Pendências de ação do operador.**
-- Chave da OpenAI exposta em chat durante a montagem. Precisa ser revogada e trocada, e o secret
-  `OPENAI_API_KEY` regravado com a nova.
-- Push dos commits locais. `origin/main` parou em `71f6243`; `main` local está 3 commits à frente
-  mais todo o trabalho desta sessão, ainda não commitado.
+- Chave da OpenAI exposta em chat durante a montagem. Foi revogada. O secret no Worker continua
+  válido, confirmado por corrida real sem 401, então não é preciso regravar nada.
 - `register-watchdog-task.ps1` continua criado e não executado. Ele já não é fail-open: o `/health`
   passou a devolver `b3_trading_day` nesta versão, que era o campo que faltava para o watchdog
   conseguir avaliar a pré-condição.
-- Os scripts de watchdog, o transporte local do Codex CLI e as duas sondas continuam untracked.
+- Os scripts de watchdog, `apps/morning-call/scripts/watchdog.ps1`,
+  `scripts/register-watchdog-task.ps1` e `tests/watchdog/`, continuam untracked.
+- O transporte local do Codex CLI foi commitado em `a035d98` sem consumidor. Decidir se fica como
+  alternativa sem custo por token ou se sai do repo para não virar divergência.
+- A árvore tem trabalho de sessões anteriores sem commit, em `briefing-interno/`,
+  `packages/analytics/`, `PENDENCIAS.md`, `IMPLEMENTATION_PLAN.md`, `apps/morning-call/src/index.ts`,
+  `prompts/strategist.md`, `src/data/agenda/index.ts` e na raiz. Não foi commitado aqui de propósito,
+  porque não pertence a esta sessão.
 
 ## Estado do Morning Call após os cartões t_7d50428e, t_e4fe0569, t_08bd0538 (18/09/2026)
 
