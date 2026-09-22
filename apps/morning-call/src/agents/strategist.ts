@@ -145,6 +145,20 @@ export function buildStrategistSystemPrompt(opts?: { incluirSchema?: boolean }):
     "4. alvo_1, alvo_2 e os dois limites da faixa usam a MESMA unidade de entrada.nivel.",
     "5. retorno_potencial e perda_maxima são MAGNITUDES positivas e da mesma unidade;",
     "   a direção da operação vem só de `direcao`, nunca do sinal desses dois.",
+    "6. entrada, faixa e alvos falam do MESMO instrumento, na MESMA escala e na MESMA ordem de",
+    "   grandeza. Um alvo a milhares por cento da entrada é erro de escala, não operação.",
+    "   Não misture taxa diária com nível anual, nem nível de índice com variação percentual.",
+    "7. retorno_potencial e perda_maxima têm de bater com a distância real entre entrada e alvo,",
+    "   na convenção de unidade que você escolher. As duas convenções são aceitas, e ambas",
+    "   precisam ser coerentes: em `pct` (3 significa 3%) ou na unidade da entrada (0.17 em",
+    "   BRL_por_USD significa 17 centavos por dólar). Declarar 3% de retorno com alvo a 8000%",
+    "   da entrada reprova a rodada.",
+    "8. sizing_pct_orcamento_risco é PERCENTUAL de 0 a 100. Cinco por cento do orçamento de risco",
+    "   é 5, nunca 0,05.",
+    // Medido em 22/09/2026. Duas corridas seguidas usaram convenções diferentes para retorno e
+    // perda, `pct` numa e a unidade da entrada na outra, e o prompt não dizia qual valia nem
+    // fixava escala nenhuma. Ambas passavam no schema porque a unidade é livre. A regra 7 mantém a
+    // liberdade e cobra coerência, que é o que o validador passou a checar também.
     "",
     "O esqueleto abaixo define A FORMA, nunca o conteúdo. Texto entre << e >> é instrução do que",
     "escrever naquele campo, não texto para copiar. Nenhum << ou >> pode sobrar na sua resposta.",

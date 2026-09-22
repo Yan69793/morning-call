@@ -154,6 +154,13 @@ describe("TradeCardDraft, estruturas que o schema antigo não modelava", () => {
         descricao: "Prêmio abaixo de 0,03 encerra a estrutura, com perda limitada ao pago.",
         nivel: { value: 0.03, unit: "BRL_por_USD" },
       },
+      // O fixture herdava retorno 3% e perda 1,5% em `pct` do direcional acima, valores que não têm
+      // relação com uma estrutura comprada a 0,06 de prêmio. Antes da regra de escala de 22/09/2026
+      // o schema aceitava essa combinação, e o fixture provava só a forma, não a coerência. Aqui o
+      // retorno e a perda passam a ser a distância real até o alvo e a invalidação, na unidade da
+      // entrada, o que dá risco-retorno 2 e é o que a estrutura de fato oferece.
+      retorno_potencial: { value: 0.06, unit: "BRL_por_USD" },
+      perda_maxima: { value: 0.03, unit: "BRL_por_USD" },
     });
     expect(TradeCardDraft.safeParse(callSpread).success).toBe(true);
   });
@@ -270,5 +277,142 @@ describe("risco_retorno é derivado, nunca declarado", () => {
     expect(card.risco_retorno).toEqual({ value: 2.75, unit: "ratio" });
     expect(card.provenance.model).toBe("openrouter/test/mock-model");
     expect(card.id).toBe(TRADE_ID);
+  });
+});
+
+/**
+ * Regressão de 22/09/2026. A corrida das 10h06 publicou `comprar_cdi_diaria` com entrada
+ * `0.050788 pct`, que é a taxa diária do CDI, e alvos `4.22` e `4.9205 pct`, que são ordem de
+ * grandeza anual, com `retorno_potencial` de 3%. Passou por todos os portões do dia, porque
+ * `unidadesBatem` compara rótulo de unidade e a ordem dos níveis respeitava a direção.
+ *
+ * Os valores abaixo são os do documento publicado, não inventados.
+ */
+describe("coerência de escala entre entrada, alvos, retorno e perda", () => {
+  /** O caso publicado, com faixa, alvos e invalidação exatamente como saíram em produção. */
+  function cdiDiario(over: Partial<Draft> = {}): unknown {
+    return direcional({
+      nome: "comprar_cdi_diaria",
+      classe: "juros",
+      categoria: "carry",
+      entrada: {
+        tipo: "preco",
+        instrumento: "CDI_DIARIA",
+        nivel: { value: 0.050788, unit: "pct" },
+        faixa: {
+          min: { value: 0.050788, unit: "pct" },
+          max: { value: 13.5, unit: "pct" },
+        },
+      },
+      alvo_1: { value: 4.22, unit: "pct" },
+      alvo_2: { value: 4.9205, unit: "pct" },
+      invalidacao: {
+        descricao: "A tese cai se a ata sinalizar interrupção do ciclo de afrouxamento.",
+        nivel: { value: 0.01, unit: "pct" },
+      },
+      ...over,
+    });
+  }
+
+  it("rejeita o trade publicado: alvo a 8200% da entrada com retorno declarado de 3%", () => {
+    const parsed = TradeCardDraft.safeParse(
+      cdiDiario({
+        retorno_potencial: { value: 3, unit: "pct" },
+        perda_maxima: { value: 1, unit: "pct" },
+      }),
+    );
+    expect(parsed.success).toBe(false);
+    if (!parsed.success) {
+      const mensagens = parsed.error.issues.map((i) => i.message);
+      expect(mensagens.some((m) => m.includes("escala trocada"))).toBe(true);
+    }
+  });
+
+  it("rejeita a perda declarada fora de escala mesmo quando o retorno está coerente", () => {
+    const parsed = TradeCardDraft.safeParse(
+      cdiDiario({
+        // 79% é a distância real de 0.050788 até 0.01, então o retorno bate e só a perda falha.
+        retorno_potencial: { value: 8200, unit: "pct" },
+        perda_maxima: { value: 1, unit: "pct" },
+      }),
+    );
+    expect(parsed.success).toBe(false);
+    if (!parsed.success) {
+      const perda = parsed.error.issues.filter((i) => i.path.join(".") === "perda_maxima");
+      expect(perda.some((i) => i.message.includes("escala trocada"))).toBe(true);
+    }
+  });
+
+  it("aceita os mesmos níveis quando o retorno declarado é a distância real até o alvo", () => {
+    // 4.22 está a 8200% de 0.050788. Declarar isso é feio, mas é coerente, e coerência é o que a
+    // regra cobra. Quem decide se 8200% é operação plausível é o gate, não o schema.
+    expect(
+      TradeCardDraft.safeParse(
+        cdiDiario({
+          retorno_potencial: { value: 8000, unit: "pct" },
+          perda_maxima: { value: 79, unit: "pct" },
+        }),
+      ).success,
+    ).toBe(true);
+  });
+
+  it("aceita a convenção absoluta, na unidade da entrada, com os valores da corrida boa de 22/09", () => {
+    expect(
+      TradeCardDraft.safeParse(
+        direcional({
+          nome: "vender dolar no estresse",
+          direcao: "vender",
+          entrada: {
+            tipo: "preco",
+            instrumento: "USDBRL",
+            nivel: { value: 5.1117, unit: "BRL_por_USD" },
+            faixa: {
+              min: { value: 5.1117, unit: "BRL_por_USD" },
+              max: { value: 5.2, unit: "BRL_por_USD" },
+            },
+          },
+          alvo_1: { value: 5.0234, unit: "BRL_por_USD" },
+          alvo_2: { value: 4.9351, unit: "BRL_por_USD" },
+          invalidacao: {
+            descricao: "Fechamento acima de 5,20 por dois pregões encerra a posição.",
+            nivel: { value: 5.2, unit: "BRL_por_USD" },
+          },
+          retorno_potencial: { value: 0.1766, unit: "BRL_por_USD" },
+          perda_maxima: { value: 0.0883, unit: "BRL_por_USD" },
+        }),
+      ).success,
+    ).toBe(true);
+  });
+
+  it("tolera desvio de uma ordem de grandeza, que é arredondamento", () => {
+    // Entrada 5,4 com alvo_1 5,55 dá 2,78%. Declarar 0,3% é cinco vezes menos, e passa.
+    expect(
+      TradeCardDraft.safeParse(direcional({ retorno_potencial: { value: 0.3, unit: "pct" } }))
+        .success,
+    ).toBe(true);
+    // Declarar 0,03% é cento e oitenta vezes menos, e não passa.
+    expect(
+      TradeCardDraft.safeParse(direcional({ retorno_potencial: { value: 0.03, unit: "pct" } }))
+        .success,
+    ).toBe(false);
+  });
+
+  it("não julga quando a invalidação não tem nível, que é o caso de evento sem preço", () => {
+    const semNivel = direcional({
+      invalidacao: {
+        descricao: "Ata do Copom com sinalização de alta interrompe a tese.",
+        nivel: null,
+      },
+      perda_maxima: { value: 1.5, unit: "pct" },
+    });
+    expect(TradeCardDraft.safeParse(semNivel).success).toBe(true);
+  });
+
+  it("não julga unidade que a regra não sabe normalizar, em vez de reprovar por dúvida", () => {
+    const bpsContraPct = direcional({
+      retorno_potencial: { value: 3, unit: "bps" },
+      perda_maxima: { value: 3, unit: "bps" },
+    });
+    expect(TradeCardDraft.safeParse(bpsContraPct).success).toBe(true);
   });
 });

@@ -94,6 +94,95 @@ export const Invalidation = z.object({
 const unidadesBatem = (qs: Quantity[]): boolean => qs.every((q) => q.unit === qs[0]!.unit);
 
 /**
+ * Mesma unidade não garante mesma escala.
+ *
+ * Medido em 22/09/2026: uma corrida publicou `comprar_cdi_diaria` com entrada `0.050788 pct`, que
+ * é a taxa diária do CDI, e alvos `4.22` e `4.9205 pct`, que são ordem de grandeza anual. Passou
+ * por todos os portões porque tudo estava rotulado `pct` e a ordem dos níveis respeitava a direção.
+ * `unidadesBatem` compara rótulo, não grandeza, e o `validateMorningCall` checa ordenação,
+ * proveniência e soma de probabilidades.
+ *
+ * A regra abaixo não inventa faixa por classe de ativo, o que exigiria arbitrar limites de mercado.
+ * Ela cobra coerência entre números que o PRÓPRIO modelo escreveu: o retorno declarado e a
+ * distância real entre a entrada e os alvos. Um alvo a 8200% da entrada não pode vir acompanhado de
+ * retorno potencial de 3%.
+ *
+ * Critério, ordem de grandeza com fator 10. Escolhido por dois motivos. É tolerante ao que precisa
+ * ser tolerado, arredondamento do modelo e a convenção de mirar alvo_1 ou alvo_2, já que basta
+ * casar com um dos dois. E é implacável com o que precisa ser pego, confusão de escala, que erra
+ * por milhares de vezes, como no caso medido.
+ *
+ * Normaliza os dois lados antes de comparar, o que deixa a regra agnóstica de convenção. As duas
+ * corridas de 22/09 usaram convenções diferentes e ambas são legítimas: uma declarou retorno em
+ * `pct` (3 = 3%), a outra declarou em `BRL_por_USD` (0.1766 = distância em reais por dólar). Por
+ * isso o valor declarado é convertido em fração da entrada antes da comparação.
+ */
+export const FATOR_ESCALA_MAXIMO = 10;
+
+/** Fração equivalente, medida contra o módulo da entrada. `null` quando não dá para normalizar. */
+export function fracaoDeclarada(
+  quantidade: Quantity,
+  unidadeDaEntrada: string,
+  nivelDaEntrada: number,
+): number | null {
+  if (quantidade.unit === "pct") return quantidade.value / 100;
+  if (quantidade.unit === unidadeDaEntrada) {
+    return nivelDaEntrada === 0 ? null : quantidade.value / Math.abs(nivelDaEntrada);
+  }
+  return null;
+}
+
+/** Movimento fracionário da entrada até um nível. `null` quando a entrada é zero. */
+export function fracaoAte(nivelDaEntrada: number, nivel: number): number | null {
+  if (nivelDaEntrada === 0) return null;
+  return Math.abs(nivel - nivelDaEntrada) / Math.abs(nivelDaEntrada);
+}
+
+/** Mesma ordem de grandeza, com o fator declarado. Zero só casa com zero. */
+export function mesmaOrdemDeGrandeza(a: number, b: number): boolean {
+  if (a === 0 || b === 0) return a === b;
+  const razao = Math.abs(a / b);
+  return razao <= FATOR_ESCALA_MAXIMO && razao >= 1 / FATOR_ESCALA_MAXIMO;
+}
+
+/**
+ * O que as regras de escala precisam enxergar. Estrutural de propósito: escrever
+ * `z.infer<typeof TradeCardDraft>` aqui cria ciclo de tipo com o próprio schema, já que estas
+ * funções são chamadas dentro do `.refine()` dele.
+ */
+interface NiveisDoTrade {
+  entrada: { nivel: Quantity };
+  alvo_1: Quantity;
+  alvo_2: Quantity;
+  invalidacao: { nivel: Quantity | null };
+  retorno_potencial: Quantity;
+  perda_maxima: Quantity;
+}
+
+/** O retorno declarado casa com a distância até pelo menos um dos alvos. */
+function escalaDoRetornoBate(t: NiveisDoTrade): boolean {
+  const entrada = t.entrada.nivel;
+  const declarado = fracaoDeclarada(t.retorno_potencial, entrada.unit, entrada.value);
+  if (declarado === null) return true; // convenção que a regra não sabe ler não é reprovada aqui
+  const ateAlvo1 = fracaoAte(entrada.value, t.alvo_1.value);
+  const ateAlvo2 = fracaoAte(entrada.value, t.alvo_2.value);
+  if (ateAlvo1 === null || ateAlvo2 === null) return true;
+  return mesmaOrdemDeGrandeza(declarado, ateAlvo1) || mesmaOrdemDeGrandeza(declarado, ateAlvo2);
+}
+
+/** A perda declarada casa com a distância até a invalidação. Sem nível de invalidação, não julga. */
+function escalaDaPerdaBate(t: NiveisDoTrade): boolean {
+  const inval = t.invalidacao.nivel;
+  if (inval === null) return true;
+  const entrada = t.entrada.nivel;
+  const declarado = fracaoDeclarada(t.perda_maxima, entrada.unit, entrada.value);
+  if (declarado === null) return true;
+  const ateInval = fracaoAte(entrada.value, inval.value);
+  if (ateInval === null) return true;
+  return mesmaOrdemDeGrandeza(declarado, ateInval);
+}
+
+/**
  * O que o LLM produz. Note o que NÃO está aqui: `risco_retorno`. Ele é derivado em código a
  * partir de retorno e perda (CLAUDE.md §3: LLM interpreta número, não produz).
  */
@@ -172,6 +261,17 @@ export const TradeCardDraft = z
   )
   .refine((t) => t.retorno_potencial.value > 0 && t.perda_maxima.value > 0, {
     message: "retorno e perda são magnitudes, sempre positivas; a direção vem de `direcao`",
+    path: ["perda_maxima"],
+  })
+  // Escala, não rótulo. Ver o comentário de `FATOR_ESCALA_MAXIMO` para o caso medido em 22/09/2026.
+  .refine((t) => escalaDoRetornoBate(t), {
+    message:
+      "retorno_potencial não bate com a distância entre entrada e alvo, o que indica escala trocada entre a entrada e os alvos",
+    path: ["retorno_potencial"],
+  })
+  .refine((t) => escalaDaPerdaBate(t), {
+    message:
+      "perda_maxima não bate com a distância entre entrada e invalidação, o que indica escala trocada entre a entrada e a invalidação",
     path: ["perda_maxima"],
   })
   .refine((t) => t.retorno_potencial.unit === t.perda_maxima.unit, {

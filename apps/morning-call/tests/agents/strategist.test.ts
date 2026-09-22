@@ -338,6 +338,18 @@ describe("regras de coerência do trade: prompt e validador dizem a mesma coisa"
       nome: "retorno e perda como magnitudes positivas",
       noPrompt: /MAGNITUDES positivas/,
     },
+    {
+      nome: "mesma escala e ordem de grandeza entre entrada e alvos",
+      noPrompt: /MESMA escala e na MESMA ordem de\s+grandeza/,
+    },
+    {
+      nome: "retorno e perda batendo com a distância até alvo e invalidação",
+      noPrompt: /bater com a distância real entre entrada e alvo/,
+    },
+    {
+      nome: "sizing como percentual de 0 a 100",
+      noPrompt: /sizing_pct_orcamento_risco é PERCENTUAL de 0 a 100/,
+    },
   ];
 
   for (const regra of REGRAS) {

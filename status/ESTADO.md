@@ -10,8 +10,9 @@ partida com os ponteiros.
 ## Morning Call publicado de novo em 22/09/2026, provedor trocado para a API da OpenAI
 
 **Data:** 2026-09-22
-**Versão no ar:** `3af4940b-e287-4bf3-9765-1acf42c560b9`
-**Versão anterior, para rollback:** `80119351-9a44-4cf2-86de-6e931456abb3`, e antes dela
+**Versão no ar:** `c9fcdad5-b213-4661-82e1-06d407a1aed7`, que é a de 22/09 com a validação de escala.
+**Versão anterior, para rollback:** `3af4940b-e287-4bf3-9765-1acf42c560b9` (provedor OpenAI sem a
+validação de escala), `80119351-9a44-4cf2-86de-6e931456abb3` (primeira com o tipo `Provedor`),
 `3236ad8c-a9a7-49eb-ba35-a963815cf3bc` (só troca de secret) e o código de 17/09
 `240e920e-c8ad-481e-aa10-a80f7435f19d`.
 
@@ -54,22 +55,21 @@ limitado a `MAX_TENTATIVAS_CORRECAO = 2`, que devolve ao modelo a lista de probl
 motivo (`problemasDeValidacao`, `buildCorrecaoPrompt`). Erro que não é de validação sobe na hora,
 sem gastar chamada. Evento estruturado `strategist_correcao` marca cada correção.
 
-**Resultado medido.** Três corridas em 22/09, todas com os seis steps verdes.
+**Resultado medido.** Quatro corridas em 22/09, todas com os seis steps verdes.
 
 | instância | hora | resultado |
 | --- | --- | --- |
 | `32e0f90a-d32e-415c-b2a0-da64f3266bee` | 10h06 BRT | publicou, 2 trades, `aprovado: true` |
 | `0c6efb74-01c4-4777-86fe-55558bdac54b` | 10h12 BRT | publicou, 1 trade, `aprovado: true` |
+| `d12fd9d6-4654-49e5-be9b-178f5b23378e` | 10h35 BRT | publicou, 2 trades, `aprovado: true`, com a validação de escala |
 
 A segunda corrida foi disparada de propósito para testar a credencial, já que a chave usada na
 montagem tinha sido exposta em chat. `research-1` e `analyst-1` passaram sem 401, então o secret
 `OPENAI_API_KEY` guarda chave válida e o caminho da OpenAI está de pé. `/api/report/latest` devolve
-`trade_date` 2026-09-22, `aprovado: true`, `ok: true`, `gateReasons` vazio. Gate do repo: 427
-testes, typecheck exit 0, lint com os mesmos 10 erros pré-existentes em
-`apps/morning-call/scripts/shadow/run-shadow-ab.ts`, que é untracked.
+`trade_date` 2026-09-22, `aprovado: true`, `ok: true`, `gateReasons` vazio.
 
-Commitado e enviado: `1c0ccb3` (troca de provedor) e `a035d98` (ferramentas locais de medição),
-`origin/main` em `a035d98`.
+Gate do repo na versão final: 437 testes, typecheck exit 0, lint com os mesmos 10 erros
+pré-existentes em `apps/morning-call/scripts/shadow/run-shadow-ab.ts`, que é untracked.
 
 **Proveniência preservada, com ressalva.** `gpt-5-search-api` pesquisa e devolve anotação, e a
 cadeia montou fontes reais com domínio (exame.com, agenciagov.ebc.com.br, cnnbrasil.com.br,
@@ -79,24 +79,55 @@ publicação, então toda fonte caiu em `janela: "indeterminado"` e o selo de fr
 O `research` também **não** usa `response_format` hoje, o que importa porque o `gpt-5-search-api`
 recusa `json_object` com `not supported with web_search`.
 
-**Defeito de qualidade em aberto, este sim é o que precisa de decisão.** O trade 1 da corrida das
-10h06, `comprar_cdi_diaria`, tem entrada `0.050788 pct` (a taxa diária do CDI), alvo_1 `4.22 pct`,
-alvo_2 `4.9205 pct`, invalidação `0.01` e faixa de `0.050788` a `13.5`. Mistura taxa diária com
-nível anual. Passa pelo validador porque tudo está rotulado `pct` e a ordem dos níveis respeita a
-direção, e passa pelo `validateMorningCall` porque as regras de lá são de ordenação, proveniência e
-soma de probabilidades, não de plausibilidade econômica. O `unidadesBatem` pega unidade diferente,
-não escala dentro da mesma unidade. O terceiro alvo do trade 1 e o do trade 2 são o mesmo número,
-`4.9205`, o que sugere ancoragem do modelo num valor do snapshot. Nenhum portão automático pega
-isso, então é decisão do operador: aceitar, endurecer o validador, ou trocar o modelo do strategist.
+**Defeito de escala encontrado, diagnosticado e fechado no mesmo dia.** O trade 1 da corrida das
+10h06, `comprar_cdi_diaria`, saiu com entrada `0.050788 pct` (a taxa diária do CDI), alvo_1 `4.22 pct`,
+alvo_2 `4.9205 pct`, invalidação `0.01` e faixa de `0.050788` a `13.5`. Misturava taxa diária com
+nível anual e passou por todos os portões, porque `unidadesBatem` compara rótulo de unidade e a
+ordem dos níveis respeitava a direção, e porque o `validateMorningCall` checa ordenação,
+proveniência e soma de probabilidades, não plausibilidade.
 
-O defeito não é estável, o que o torna mais traiçoeiro. A corrida das 10h12 saiu com um único trade,
-`vender dolar no estresse`, e ele está coerente ponta a ponta: entrada `5.1117`, alvo_1 `5.0234`,
-alvo_2 `4.9351`, invalidação `5.2`, tudo em `BRL_por_USD` e na mesma escala. Duas amostras, uma
-doente e uma sadia, e nada no relatório diz qual é qual. Apareceu também uma segunda manifestação da
-mesma classe no campo de tamanho: `sizing_pct_orcamento_risco` saiu `25` e `35` na primeira corrida
-e `0.35` na segunda, ou seja diferença de duas ordens de grandeza no mesmo campo, e nenhum portão
-cobra coerência de escala ali. O padrão é claro: quando o prompt não fixa a escala de um campo
-numérico, o modelo escolhe uma livremente, e ordenação e unidade não pegam isso.
+O defeito não era estável, o que o tornava mais traiçoeiro. A corrida das 10h12 saiu com um único
+trade, `vender dolar no estresse`, coerente ponta a ponta, e nada no relatório distinguia os dois
+casos. A mesma classe apareceu em `sizing_pct_orcamento_risco`, que saiu `25` e `35` numa corrida e
+`0.35` na outra, duas ordens de grandeza no mesmo campo.
+
+**O que foi implementado, versão `c9fcdad5-b213-4661-82e1-06d407a1aed7`.** Duas metades, porque
+portão sem instrução só reprova e instrução sem portão não impede publicação.
+
+No validador, `sealTradeCard` em `src/schemas/trade.ts` ganhou duas regras de escala. O retorno
+declarado tem de estar na mesma ordem de grandeza da distância real entre a entrada e pelo menos um
+dos alvos, e a perda declarada na mesma ordem de grandeza da distância até a invalidação. O critério
+é fator 10, `FATOR_ESCALA_MAXIMO`, escolhido por tolerar arredondamento e a convenção de mirar
+alvo_1 ou alvo_2, e por pegar confusão de escala, que erra por milhares de vezes. A regra não
+arbitra faixa por classe de ativo, cobra coerência entre números que o próprio modelo escreveu.
+
+A normalização é o detalhe que faz a regra funcionar. As duas corridas de 22/09 usaram convenções
+diferentes para retorno e perda e as duas são legítimas, uma em `pct` (3 significa 3%) e a outra na
+unidade da entrada (`0.1766 BRL_por_USD` significa a distância até o alvo). O valor declarado é
+convertido em fração da entrada antes da comparação, então a regra é agnóstica de convenção em vez
+de forçar uma. Unidade que ela não sabe normalizar não reprova, para não virar falso positivo.
+
+No prompt, `buildStrategistSystemPrompt` ganhou as regras 6, 7 e 8 do bloco de coerência: mesma
+escala e ordem de grandeza entre entrada, faixa e alvos, retorno e perda batendo com a distância
+real, e `sizing_pct_orcamento_risco` explicitamente como percentual de 0 a 100, porque o schema
+aceita `0.35` e interpretá-lo como 35% ou 0,35% muda o risco da carteira. A regra 8 sozinha já
+resolveu o sizing, que voltou para `25` e `35` na corrida de verificação.
+
+**Resultado medido.** Instância `d12fd9d6-4654-49e5-be9b-178f5b23378e`, todos os steps verdes,
+publicada às 13h35 UTC com 2 trades, `aprovado: true`. A cadeia de erro de escala apareceu duas
+vezes no detalhe da instância, o que significa que a regra reprovou uma tentativa e a correção
+guiada pelo validador consertou, sem gastar retry do Workflow. Os dois trades publicados estão
+coerentes. `Long USDBRL tatico`, entrada `5.1117`, alvo_1 `5.2`, alvo_2 `5.3`, invalidação `5.04`,
+retorno `0.1883 BRL_por_USD` (que é exatamente `5.3 - 5.1117`) e perda `0.0717` (exatamente
+`5.1117 - 5.04`). `Long Brent spot ref`, entrada `130.8 USD`, alvo_2 `140`, invalidação `126`,
+retorno `9.2` e perda `4.8`, os dois exatos.
+
+**Efeito colateral correto, que vale registrar.** O fixture do call spread em
+`tests/schemas/trade.test.ts` quebrou com a regra nova, e a causa era o próprio fixture. Ele herdava
+retorno `3%` e perda `1,5%` em `pct` do direcional acima, valores sem relação com uma estrutura
+comprada a `0,06` de prêmio com alvo em `0,12`. Antes da regra o teste provava forma, não coerência,
+e passava. O fixture foi corrigido para declarar a distância real e o comentário no teste explica
+por quê.
 
 **Pendências de ação do operador.**
 - Chave da OpenAI exposta em chat durante a montagem. Foi revogada. O secret no Worker continua
