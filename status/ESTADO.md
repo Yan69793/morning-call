@@ -1,11 +1,92 @@
 # Estado do projeto — Morning Call
 
-Última atualização: 2026-09-18 (agente: Hermes Code, worker do board)
+Última atualização: 2026-09-22 (agente: DeepSeek/Codex, sessão de troca de provedor)
 
 Leia este arquivo antes de começar qualquer trabalho, seja qual for o agente.
 Atualize a data e os itens abertos ao fechar uma sessão que mudou o estado.
 Não duplique conteúdo do CLAUDE.md nem do README.md: aqui fica só o ponto de
 partida com os ponteiros.
+
+## Morning Call publicado de novo em 22/09/2026, provedor trocado para a API da OpenAI
+
+**Data:** 2026-09-22
+**Versão no ar:** `3af4940b-e287-4bf3-9765-1acf42c560b9`
+**Versão anterior, para rollback:** `80119351-9a44-4cf2-86de-6e931456abb3`, e antes dela
+`3236ad8c-a9a7-49eb-ba35-a963815cf3bc` (só troca de secret) e o código de 17/09
+`240e920e-c8ad-481e-aa10-a80f7435f19d`.
+
+**O problema que existia.** `/api/report/latest` servia `trade_date` 2026-09-08 desde 08/09, dez
+pregões sem publicação. A causa registrada era o 402 de reserva de `max_tokens` do OpenRouter, e a
+cota real medida em 22/09 era de 933 tokens contra 9517 em 16/09 e 2916 em 17/09. A chave do
+OpenRouter é a mesma que o pipeline do `briefing-interno` consome todo dia às 07h00.
+
+**A troca de provedor.** `chatCompletion` deixou de ter o booleano `deepseekApi` e passou a ter o
+tipo `Provedor` com `openrouter`, `deepseek` e `openai`. `resolverCadeiaLlm`, exportado de
+`src/workflow.ts`, decide provedor, chave e o modelo das quatro etapas a partir do ambiente, com
+precedência `OPENAI_API_KEY` > `DEEPSEEK_API_KEY` > `OPENROUTER_API_KEY`. Antes essa decisão estava
+espalhada em três blocos com regras diferentes, que foi a origem do incidente de 09/09.
+
+**Configuração no ar.** `OPENAI_API_KEY` é secret. Os modelos ficaram em `[vars]` do
+`wrangler.toml`, e não em secret, porque o deploy já ia acontecer e config revisável em git vale
+mais que config editável sem deploy: `OPENAI_STRATEGIST_MODEL=gpt-5.4`,
+`OPENAI_ANALYST_MODEL=gpt-5.4-mini`, `OPENAI_CALENDAR_MODEL=gpt-5.4`,
+`RESEARCH_MODEL=gpt-5-search-api`. O secret `STRATEGIST_MODEL` que já existia continua valendo para
+o caminho OpenRouter e fica inerte enquanto o provedor for OpenAI.
+
+**Três defeitos que a medição pegou, e que nenhuma leitura de código pegaria.**
+
+1. `max_tokens` não existe na família `gpt-5.x` e `gpt-6`. A sonda `scripts/local/probe-openai.ts`
+   mediu, em 12 modelos e 4 testes cada, que todos recusam com `Unsupported parameter ... Use
+   'max_completion_tokens' instead`. O `chatCompletion` passou a mandar `max_completion_tokens`
+   quando o provedor é OpenAI. Sem isso a primeira corrida seria 400 nas quatro etapas.
+2. Quatro ids da listagem `/v1/models` da conta respondem 404 `has been deprecated` quando usados
+   (`gpt-5.3-chat-latest`, `gpt-5.2-chat-latest`, `gpt-4o-mini-search-preview`,
+   `gpt-4o-search-preview`). Listagem de modelos não é prova de capacidade.
+3. O prompt do strategist nunca enunciava as invariantes que `sealTradeCard` cobra. A primeira
+   corrida real reprovou 3 de 4 trades por `alvo_1 contradiz a direção da operação`. As regras
+   passaram a constar do system prompt, com teste que amarra prompt e validador
+   (`tests/agents/strategist.test.ts`).
+
+**A correção guiada pelo validador.** Enunciar as regras resolveu o `alvo_1` e não resolveu tudo:
+a corrida seguinte reprovou por `alvo_2 precisa ser mais distante da entrada que alvo_1` e
+`invalidação está do lado errado da entrada`. `runStrategist` passou a ter laço de correção
+limitado a `MAX_TENTATIVAS_CORRECAO = 2`, que devolve ao modelo a lista de problemas com caminho e
+motivo (`problemasDeValidacao`, `buildCorrecaoPrompt`). Erro que não é de validação sobe na hora,
+sem gastar chamada. Evento estruturado `strategist_correcao` marca cada correção.
+
+**Resultado medido.** Corrida de 22/09 pelas 10h06 BRT, instância `32e0f90a-d32e-415c-b2a0-da64f3266bee`,
+todos os seis steps verdes, 2 minutos no total (`strategist` 1 minuto). `/api/report/latest` passou a
+devolver `trade_date` 2026-09-22, `aprovado: true`, `ok: true`, 2 trades, `gateReasons` vazio. Gate do
+repo: 427 testes, typecheck exit 0, lint com os mesmos 10 erros pré-existentes em
+`apps/morning-call/scripts/shadow/run-shadow-ab.ts`, que é untracked.
+
+**Proveniência preservada, com ressalva.** `gpt-5-search-api` pesquisa e devolve anotação, e a
+cadeia montou fontes reais com domínio (exame.com, agenciagov.ebc.com.br, cnnbrasil.com.br,
+economia.uol.com.br, agenciabrasil.ebc.com.br). Duas diferenças contra o plugin `web` do OpenRouter
+ficam registradas: as URLs vêm com `?utm_source=openai`, e as anotações não trazem data de
+publicação, então toda fonte caiu em `janela: "indeterminado"` e o selo de frescor perde valor.
+O `research` também **não** usa `response_format` hoje, o que importa porque o `gpt-5-search-api`
+recusa `json_object` com `not supported with web_search`.
+
+**Defeito de qualidade em aberto, este sim é o que precisa de decisão.** O trade 1 publicado,
+`comprar_cdi_diaria`, tem entrada `0.050788 pct` (a taxa diária do CDI), alvo_1 `4.22 pct`,
+alvo_2 `4.9205 pct`, invalidação `0.01` e faixa de `0.050788` a `13.5`. Mistura taxa diária com
+nível anual. Passa pelo validador porque tudo está rotulado `pct` e a ordem dos níveis respeita a
+direção, e passa pelo `validateMorningCall` porque as regras de lá são de ordenação, proveniência e
+soma de probabilidades, não de plausibilidade econômica. O `unidadesBatem` pega unidade diferente,
+não escala dentro da mesma unidade. O terceiro alvo do trade 1 e o do trade 2 são o mesmo número,
+`4.9205`, o que sugere ancoragem do modelo num valor do snapshot. Nenhum portão automático pega
+isso, então é decisão do operador: aceitar, endurecer o validador, ou trocar o modelo do strategist.
+
+**Pendências de ação do operador.**
+- Chave da OpenAI exposta em chat durante a montagem. Precisa ser revogada e trocada, e o secret
+  `OPENAI_API_KEY` regravado com a nova.
+- Push dos commits locais. `origin/main` parou em `71f6243`; `main` local está 3 commits à frente
+  mais todo o trabalho desta sessão, ainda não commitado.
+- `register-watchdog-task.ps1` continua criado e não executado. Ele já não é fail-open: o `/health`
+  passou a devolver `b3_trading_day` nesta versão, que era o campo que faltava para o watchdog
+  conseguir avaliar a pré-condição.
+- Os scripts de watchdog, o transporte local do Codex CLI e as duas sondas continuam untracked.
 
 ## Estado do Morning Call após os cartões t_7d50428e, t_e4fe0569, t_08bd0538 (18/09/2026)
 

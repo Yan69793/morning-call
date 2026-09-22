@@ -15,6 +15,31 @@ compatibility_flags = ["nodejs_compat"]
 ENVIRONMENT = "production"
 CORS_ORIGINS = "https://radar-quant-brasil.pages.dev,https://vixradar.com"
 
+# --- Cadeia de LLM (22/09/2026) ---
+# Provedor decidido por qual chave existe no ambiente, em `resolverCadeiaLlm` (src/workflow.ts).
+# Precedencia: OPENAI_API_KEY vence DEEPSEEK_API_KEY, que vence OPENROUTER_API_KEY. Com a chave da
+# OpenAI presente, tudo vai para api.openai.com, que e o unico caminho sem a cota semanal do
+# OpenRouter. A chave da OpenAI fica em secret, nao aqui.
+#
+# Modelo de cada etapa em variavel propria, e nao em `STRATEGIST_MODEL`: id de modelo nao atravessa
+# provedor. O `STRATEGIST_MODEL` que existe como secret na conta continua valendo para o caminho
+# OpenRouter e fica inerte enquanto o provedor for OpenAI.
+#
+# Escolha medida em 22/09/2026 pela sonda `scripts/local/probe-openai.ts`, nao por nome: a familia
+# gpt-5.x recusa `max_tokens` e exige `max_completion_tokens`, que o `chatCompletion` ja manda
+# quando o provedor e OpenAI. Nenhum id aqui foi copiado de memoria, todos vieram da listagem real
+# da conta, e quatro ids dessa listagem retornaram 404 deprecated quando usados.
+#
+# `gpt-5-search-api` e o research porque a busca web e dele: o plugin `web` so existe no OpenRouter,
+# e sem este modelo a rodada sai closed-book. Ele recusa `response_format: json_object`, mas a etapa
+# de research nao pede formato estruturado, entao a recusa nao a alcanca. Se a anotacao de
+# proveniencia dele nao vier no formato `url_citation`, o research volta vazio e a rodada segue
+# closed-book, que e o pior caso e nao derruba publicacao.
+OPENAI_STRATEGIST_MODEL = "gpt-5.4"
+OPENAI_ANALYST_MODEL = "gpt-5.4-mini"
+OPENAI_CALENDAR_MODEL = "gpt-5.4"
+RESEARCH_MODEL = "gpt-5-search-api"
+
 # Cron em UTC. BRT é UTC-3 fixo (o Brasil não observa horário de verão desde 2019).
 #   "30 9  * * 1-5" = 06:30 BRT, geração do Morning Call.
 #   "30 21 * * 1-5" = 18:30 BRT, marcação a mercado dos trades abertos.

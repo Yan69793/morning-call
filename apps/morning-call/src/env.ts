@@ -7,6 +7,22 @@ export interface Env {
   ASSETS?: Fetcher;
   OPENROUTER_API_KEY?: string;
   DEEPSEEK_API_KEY?: string;
+  /**
+   * Chave da API da OpenAI (22/09/2026). Caminho de volta da cadeia para o Cloudflare sem depender
+   * da cota do OpenRouter. A API e cobrada por token e nao tem relacao com a assinatura do Codex.
+   * Precedencia em `workflow.ts`: OPENAI_API_KEY vence DEEPSEEK_API_KEY, que vence OPENROUTER_API_KEY.
+   */
+  OPENAI_API_KEY?: string;
+  /**
+   * Modelo do strategist quando o provedor e OpenAI. Sem default no codigo de proposito: um id de
+   * modelo inventado aqui so apareceria como 404 no meio da corrida das 06:30. Ausente com
+   * OPENAI_API_KEY presente reprova a rodada com mensagem explicita.
+   */
+  OPENAI_STRATEGIST_MODEL?: string;
+  /** Modelo do analyst quando o provedor e OpenAI. Mesma regra do strategist. */
+  OPENAI_ANALYST_MODEL?: string;
+  /** Modelo do calendario economico quando o provedor e OpenAI. Mesma regra. */
+  OPENAI_CALENDAR_MODEL?: string;
   FRED_API_KEY?: string;
   /** Modelo default closed-book Portão 1 — strategist final (etapa 3 da cadeia). */
   STRATEGIST_MODEL?: string;

@@ -10,7 +10,7 @@
  * ele não inventou".
  */
 import { z } from "zod";
-import { chatCompletion } from "./openrouter.js";
+import { chatCompletion, resolverProvedor, type Provedor } from "./openrouter.js";
 import { RESEARCH_QUERY, formatarFontes, type FontePesquisada, type Janela } from "./research.js";
 
 export const JANELAS = ["24h", "contexto", "indeterminado"] as const;
@@ -193,6 +193,10 @@ export interface RunAnalystInput {
   reasoningEffort?: string | null;
   timeoutMs?: number;
   fetchFn?: typeof fetch;
+  /** Provedor da chamada. Ausente = OpenRouter. */
+  provedor?: Provedor;
+  /** @deprecated Apelido de `provedor: "deepseek"`. */
+  deepseekApi?: boolean;
 }
 
 export function buildAnalystPrompts(input: {
@@ -242,6 +246,7 @@ export async function runAnalyst(input: RunAnalystInput): Promise<AnalystResult>
   const r = await chatCompletion({
     apiKey: input.apiKey,
     model: input.model,
+    provedor: resolverProvedor(input),
     messages: [
       { role: "system", content: prompts.system },
       { role: "user", content: prompts.user },

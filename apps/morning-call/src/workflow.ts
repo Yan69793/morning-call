@@ -29,6 +29,7 @@ import {
   saveTrade,
 } from "./db/runs.js";
 import { runStrategist, strategistMaxTokensFromEnv } from "./agents/strategist.js";
+import type { Provedor } from "./agents/openrouter.js";
 import { runCalendarAgent } from "./agents/calendar.js";
 import { fetchAgendaEvents } from "./data/agenda/index.js";
 import { decidirPublicacao } from "./committee/decisao.js";
@@ -64,6 +65,82 @@ const STRATEGIST_MODEL_PADRAO = "google/gemini-3.6-flash";
  */
 const ANALYST_REASONING_EFFORT = "none";
 const STRATEGIST_REASONING_EFFORT = "low";
+
+/**
+ * Cadeia de LLM resolvida a partir do ambiente. Um provedor para a corrida inteira, com a chave e
+ * o modelo de cada etapa juntos, porque separar isso em variaveis soltas foi o que produziu o
+ * incidente de 09/09: `DEEPSEEK_API_KEY` presente mandava tudo para api.deepseek.com, inclusive o
+ * research, que depende do plugin `web` e so existe no OpenRouter.
+ */
+interface CadeiaLlm {
+  provedor: Provedor;
+  apiKey: string;
+  researchModel: string;
+  analystModel: string;
+  strategistModel: string;
+  calendarModel: string;
+}
+
+/**
+ * Precedencia das chaves, decidida por qual delas esta presente.
+ *
+ * OpenAI vem primeiro porque e o caminho que nao depende da cota semanal do OpenRouter, que e a
+ * mesma chave que o briefing-interno consome todo dia as 07h00. DeepSeek fica no meio como estava.
+ *
+ * Com `openai` a rodada e closed-book: a busca web do OpenRouter e um plugin do proprio OpenRouter
+ * e nao existe no corpo do /v1/chat/completions da OpenAI. Se o `RESEARCH_MODEL` apontar para um
+ * modelo da OpenAI que pesquise sozinho, a proveniencia volta por `annotations` e a cadeia usa, sem
+ * esta funcao precisar saber.
+ *
+ * Modelo de cada etapa e lido de variavel propria quando o provedor e OpenAI, e nunca tem default
+ * no codigo: um id inventado aqui so apareceria como 404 no meio da corrida das 06h30.
+ */
+export function resolverCadeiaLlm(env: Env): CadeiaLlm | { faltando: readonly string[] } {
+  const openaiKey = env.OPENAI_API_KEY;
+  if (openaiKey) {
+    const strategistModel = env.OPENAI_STRATEGIST_MODEL;
+    const analystModel = env.OPENAI_ANALYST_MODEL;
+    const calendarModel = env.OPENAI_CALENDAR_MODEL;
+    const faltando = [
+      ...(strategistModel ? [] : ["OPENAI_STRATEGIST_MODEL"]),
+      ...(analystModel ? [] : ["OPENAI_ANALYST_MODEL"]),
+      ...(calendarModel ? [] : ["OPENAI_CALENDAR_MODEL"]),
+      ...(env.RESEARCH_MODEL ? [] : ["RESEARCH_MODEL"]),
+    ];
+    if (faltando.length > 0) return { faltando };
+    return {
+      provedor: "openai",
+      apiKey: openaiKey,
+      researchModel: env.RESEARCH_MODEL ?? "",
+      analystModel: analystModel ?? "",
+      strategistModel: strategistModel ?? "",
+      calendarModel: calendarModel ?? "",
+    };
+  }
+  const deepseekKey = env.DEEPSEEK_API_KEY;
+  if (deepseekKey) {
+    return {
+      provedor: "deepseek",
+      apiKey: deepseekKey,
+      researchModel: env.RESEARCH_MODEL ?? RESEARCH_MODEL_PADRAO,
+      analystModel: env.ANALYST_MODEL ?? ANALYST_MODEL_PADRAO,
+      strategistModel: "deepseek-chat",
+      calendarModel: "deepseek-chat",
+    };
+  }
+  const openRouterKey = env.OPENROUTER_API_KEY;
+  if (openRouterKey) {
+    return {
+      provedor: "openrouter",
+      apiKey: openRouterKey,
+      researchModel: env.RESEARCH_MODEL ?? RESEARCH_MODEL_PADRAO,
+      analystModel: env.ANALYST_MODEL ?? ANALYST_MODEL_PADRAO,
+      strategistModel: env.STRATEGIST_MODEL ?? STRATEGIST_MODEL_PADRAO,
+      calendarModel: env.STRATEGIST_MODEL ?? STRATEGIST_MODEL_PADRAO,
+    };
+  }
+  return { faltando: ["OPENAI_API_KEY ou DEEPSEEK_API_KEY ou OPENROUTER_API_KEY"] };
+}
 
 interface Step2aResult {
   ok: boolean;
@@ -253,21 +330,21 @@ export class MorningCallWorkflow extends WorkflowEntrypoint<Env, MorningCallPara
       }
 
       // ── Step 2: cadeia de LLM (research → analyst → strategist) ──
-      const openRouterKey = this.env.OPENROUTER_API_KEY;
-      const deepseekKey = this.env.DEEPSEEK_API_KEY;
-      const useDeepSeek = Boolean(deepseekKey);
-      const apiKey = useDeepSeek ? (deepseekKey ?? "") : (openRouterKey ?? "");
-      if (!apiKey) {
+      const cadeia = resolverCadeiaLlm(this.env);
+      if ("faltando" in cadeia) {
         await finishRun(this.env.DB, s1.runId, "partial", s1.faltantes, new Date().toISOString());
-        console.log(JSON.stringify({ event: "workflow_no_apikey", runId: s1.runId }));
-        return { aborted: false, runId: s1.runId, reason: "API_KEY ausente" };
+        console.log(
+          JSON.stringify({ event: "workflow_no_apikey", runId: s1.runId, faltando: cadeia.faltando }),
+        );
+        return {
+          aborted: false,
+          runId: s1.runId,
+          reason: `configuracao ausente: ${cadeia.faltando.join(", ")}`,
+        };
       }
-
-      const researchModel = this.env.RESEARCH_MODEL ?? RESEARCH_MODEL_PADRAO;
-      const analystModel = this.env.ANALYST_MODEL ?? ANALYST_MODEL_PADRAO;
-      const strategistModel = useDeepSeek
-        ? "deepseek-chat"
-        : (this.env.STRATEGIST_MODEL ?? STRATEGIST_MODEL_PADRAO);
+      const { provedor, apiKey, researchModel, analystModel, strategistModel, calendarModel } =
+        cadeia;
+      console.log(JSON.stringify({ event: "workflow_provedor", runId: s1.runId, provedor }));
 
       // Teto de max_tokens do strategist. Ausente = padrao do strategist (8000).
       // Var invalida nao derruba a rodada: cai no padrao e loga o aviso.
@@ -282,11 +359,12 @@ export class MorningCallWorkflow extends WorkflowEntrypoint<Env, MorningCallPara
       }
 
       // ── Step 2a: research (web search default) ──
-      // Exige OPENROUTER_API_KEY: o plugin `web` só existe no OpenRouter e o caminho DeepSeek
-      // direto não tem busca. Sem chave o passo vira best-effort e a rodada segue closed-book.
+      // O plugin `web` e do OpenRouter. Nos outros provedores este passo vira best-effort sem
+      // busca e a rodada segue closed-book, com o motivo gravado no relatorio. Falha aqui nunca
+      // derruba a corrida, perder contexto externo e melhor que perder o Morning Call.
       const pesquisaVazia: Step2aResult = {
         ok: false,
-        motivo: "OPENROUTER_API_KEY ausente",
+        motivo: `pesquisa sem busca web no provedor ${provedor}`,
         fontes: [],
         conteudo: "",
         modelo: "",
@@ -300,7 +378,6 @@ export class MorningCallWorkflow extends WorkflowEntrypoint<Env, MorningCallPara
         },
       };
       const s2a = await step.do("research", async (): Promise<Step2aResult> => {
-        if (!openRouterKey) return pesquisaVazia;
         try {
           // Teto de resultados da busca web. Ausente = padrao do research (5).
           // Var invalida nao derruba a rodada: cai no padrao e loga o aviso.
@@ -316,8 +393,9 @@ export class MorningCallWorkflow extends WorkflowEntrypoint<Env, MorningCallPara
             );
           }
           const r = await runResearch({
-            apiKey: openRouterKey,
+            apiKey,
             model: researchModel,
+            provedor,
             agoraIso: new Date().toISOString(),
             ...(researchMaxResults === undefined ? {} : { maxResults: researchMaxResults }),
           });
@@ -356,7 +434,7 @@ export class MorningCallWorkflow extends WorkflowEntrypoint<Env, MorningCallPara
 
       // ── Step 2c: analyst (JSON estruturado, sem web search) ──
       const s2c = await step.do("analyst", async (): Promise<Step2cResult> => {
-        if (!openRouterKey || !s2a.ok) {
+        if (!s2a.ok) {
           return {
             ok: false,
             motivo: s2a.motivo ?? "pesquisa indisponível",
@@ -366,8 +444,9 @@ export class MorningCallWorkflow extends WorkflowEntrypoint<Env, MorningCallPara
         }
         try {
           const a = await runAnalyst({
-            apiKey: openRouterKey,
+            apiKey,
             model: analystModel,
+            provedor,
             fontes: s2a.fontes,
             pesquisa: s2a.conteudo,
             reasoningEffort: ANALYST_REASONING_EFFORT,
@@ -414,7 +493,7 @@ export class MorningCallWorkflow extends WorkflowEntrypoint<Env, MorningCallPara
           apiKey,
           model: strategistModel,
           runId: s1.runId,
-          deepseekApi: useDeepSeek,
+          provedor,
           pesquisa,
           reasoningEffort: STRATEGIST_REASONING_EFFORT,
           ...(strategistMaxTokens === undefined ? {} : { maxTokens: strategistMaxTokens }),
@@ -455,31 +534,19 @@ export class MorningCallWorkflow extends WorkflowEntrypoint<Env, MorningCallPara
             tradeDate: s1.tradeDate,
           });
 
-          // LLM para analise de impacto (mesmo com 0 eventos, gera agenda de dia calmo)
-          const deepseekKeyForCal = this.env.DEEPSEEK_API_KEY;
-          const openRouterKeyForCal = this.env.OPENROUTER_API_KEY;
-          const useDeepSeekForCal = Boolean(deepseekKeyForCal);
-          const calApiKey = useDeepSeekForCal
-            ? (deepseekKeyForCal ?? "")
-            : (openRouterKeyForCal ?? "");
-          const calModel = useDeepSeekForCal
-            ? "deepseek-chat"
-            : (this.env.STRATEGIST_MODEL ?? STRATEGIST_MODEL_PADRAO);
-
-          if (!calApiKey) {
-            return { agenda: null, agendaError: "API_KEY ausente para calendario" };
-          }
-
+          // LLM para analise de impacto (mesmo com 0 eventos, gera agenda de dia calmo).
+          // Mesmo provedor, mesma chave e mesmo modelo do resto da cadeia: o calendario e uma
+          // etapa a mais, nao um caminho proprio, e ja nasceu divergindo uma vez.
           const calResult = await runCalendarAgent({
             input: {
               trade_date: s1.tradeDate,
               eventos,
               fonte: fontes.join(", ") || "fallback-estatico",
             },
-            apiKey: calApiKey,
-            model: calModel,
+            apiKey,
+            model: calendarModel,
             runId: s1.runId,
-            deepseekApi: useDeepSeekForCal,
+            provedor,
           });
 
           // Diferente do strategist, eco aqui nao aborta a rodada inteira: o calendario e

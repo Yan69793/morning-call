@@ -297,3 +297,189 @@ describe("eco do prompt", () => {
     expect(result.echo).toEqual([]);
   });
 });
+
+/**
+ * Regressão de 22/09/2026. A primeira corrida na API da OpenAI reprovou tres de quatro trades por
+ * `alvo_1 contradiz a direção da operação`. A regra existia só no `.refine()` de `sealTradeCard` e
+ * nunca era dita ao modelo, então o prompt julgava por invariante que ele não recebia. Passou a
+ * funcionar em produção porque o fornecedor anterior trazia a convenção de mercado como prior, o
+ * que é sorte de fornecedor, não desenho.
+ *
+ * Este bloco amarra as duas pontas: cada regra crítica aparece no prompt E é de fato reprovada pelo
+ * validador. Enfraquecer qualquer uma das duas quebra aqui, não às 06h30.
+ */
+describe("regras de coerência do trade: prompt e validador dizem a mesma coisa", () => {
+  const prompt = buildStrategistSystemPrompt({ incluirSchema: true });
+  const provenanceFalso = {
+    run_id: RUN,
+    model: "mock",
+    prompt_version: "t",
+    generated_at: "2026-07-15T10:00:00.000Z",
+  };
+
+  const REGRAS: { nome: string; noPrompt: RegExp }[] = [
+    {
+      nome: "comprar exige alvo acima da entrada",
+      noPrompt: /direcao="comprar": alvo_1 acima de entrada\.nivel/,
+    },
+    {
+      nome: "vender exige alvo abaixo da entrada",
+      noPrompt: /direcao="vender": alvo_1 abaixo de entrada\.nivel/,
+    },
+    {
+      nome: "nivel de entrada dentro da propria faixa",
+      noPrompt: /entrada\.faixa\.min <= entrada\.nivel <= entrada\.faixa\.max/,
+    },
+    {
+      nome: "alvos e faixa na mesma unidade da entrada",
+      noPrompt: /MESMA unidade de entrada\.nivel/,
+    },
+    {
+      nome: "retorno e perda como magnitudes positivas",
+      noPrompt: /MAGNITUDES positivas/,
+    },
+  ];
+
+  for (const regra of REGRAS) {
+    it(`o prompt enuncia: ${regra.nome}`, () => {
+      expect(prompt).toMatch(regra.noPrompt);
+    });
+  }
+
+  it("o validador reprova comprar com alvo abaixo da entrada", () => {
+    const raw = parseStrategistContent(validMockJson(15));
+    raw.trades[0]!.alvo_1 = { value: 4.9, unit: "BRL_por_USD" };
+    expect(() => sealStrategistTrades(raw, provenanceFalso)).toThrow(
+      /alvo_1 contradiz a direção da operação/,
+    );
+  });
+
+  it("o validador reprova invalidacao do lado errado da entrada", () => {
+    const raw = parseStrategistContent(validMockJson(15));
+    raw.trades[0]!.invalidacao.nivel = { value: 5.5, unit: "BRL_por_USD" };
+    expect(() => sealStrategistTrades(raw, provenanceFalso)).toThrow(
+      /invalidação está do lado errado da entrada/,
+    );
+  });
+
+  it("o validador aceita o trade coerente do mock, para o teste acima nao passar por acidente", () => {
+    const raw = parseStrategistContent(validMockJson(15));
+    expect(() => sealStrategistTrades(raw, provenanceFalso)).not.toThrow();
+  });
+});
+
+/** Respostas de chat completion em sequencia, para exercitar a correção guiada pelo validador. */
+function fetchSequencial(conteudos: string[]): { fetchFn: typeof fetch; prompts: string[] } {
+  const prompts: string[] = [];
+  let i = 0;
+  const fetchFn = (input: unknown, init?: RequestInit): Promise<Response> => {
+    const cru = init?.body;
+    if (typeof cru !== "string") throw new Error("fake espera corpo como string JSON");
+    const corpo = JSON.parse(cru) as { messages?: { content?: string }[] };
+    for (const m of corpo.messages ?? []) prompts.push(m.content ?? "");
+    const conteudo = conteudos[Math.min(i, conteudos.length - 1)];
+    i += 1;
+    return Promise.resolve(
+      new Response(
+        JSON.stringify({ choices: [{ message: { content: conteudo } }], model: "mock" }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+  };
+  return { fetchFn, prompts };
+}
+
+/** JSON válido com um alvo_2 mais perto da entrada que o alvo_1, que o validador reprova. */
+function mockJsonAlvo2Raso(): string {
+  const cru = JSON.parse(validMockJson(15)) as {
+    trades: { alvo_2: { value: number; unit: string } }[];
+  };
+  cru.trades[0]!.alvo_2 = { value: 5.1, unit: "BRL_por_USD" };
+  return JSON.stringify(cru);
+}
+
+describe("correção guiada pelo validador", () => {
+  it("primeira resposta reprovada e segunda aprovada: corrige em vez de reprovar a rodada", async () => {
+    const { fetchFn, prompts } = fetchSequencial([mockJsonAlvo2Raso(), validMockJson(15)]);
+    const r = await runStrategist({
+      snapshot,
+      apiKey: "x",
+      model: "mock",
+      runId: RUN,
+      fetchFn,
+    });
+    expect(r.trades.length).toBeGreaterThan(0);
+    // A segunda chamada levou o erro do validador no texto.
+    expect(prompts.some((p) => p.includes("alvo_2 precisa ser mais distante"))).toBe(true);
+    expect(prompts.some((p) => p.includes("REPROVADO pelo validador"))).toBe(true);
+  });
+
+  it("reprovando sempre, o laço é limitado e sobe o erro da validação", async () => {
+    let chamadas = 0;
+    const fetchFn = (): Promise<Response> => {
+      chamadas += 1;
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            choices: [{ message: { content: mockJsonAlvo2Raso() } }],
+            model: "mock",
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+    };
+    await expect(
+      runStrategist({
+        snapshot,
+        apiKey: "x",
+        model: "mock",
+        runId: RUN,
+        fetchFn,
+      }),
+    ).rejects.toThrow(/alvo_2 precisa ser mais distante/);
+    // 1 tentativa + MAX_TENTATIVAS_CORRECAO correções, e nem uma a mais.
+    expect(chamadas).toBe(3);
+  });
+
+  it("JSON quebrado não pede correção: sobe na hora, com uma única chamada", async () => {
+    let chamadas = 0;
+    const fetchFn = (): Promise<Response> => {
+      chamadas += 1;
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({ choices: [{ message: { content: "nao sou json" } }], model: "mock" }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+    };
+    await expect(
+      runStrategist({
+        snapshot,
+        apiKey: "x",
+        model: "mock",
+        runId: RUN,
+        fetchFn,
+      }),
+    ).rejects.toThrow();
+    expect(chamadas).toBe(1);
+  });
+
+  it("mockContent não passa por rede nem por correção", async () => {
+    let chamadas = 0;
+    const fetchFn = (): Promise<Response> => {
+      chamadas += 1;
+      return Promise.resolve(new Response("{}", { status: 200 }));
+    };
+    await expect(
+      runStrategist({
+        snapshot,
+        apiKey: "x",
+        model: "mock",
+        runId: RUN,
+        mockContent: mockJsonAlvo2Raso(),
+        fetchFn,
+      }),
+    ).rejects.toThrow(/alvo_2 precisa ser mais distante/);
+    expect(chamadas).toBe(0);
+  });
+});

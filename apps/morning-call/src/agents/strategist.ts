@@ -3,7 +3,13 @@
  * Output: claims + drafts + abertura. TradeCard selado em código.
  */
 import { z } from "zod";
-import { chatCompletion } from "./openrouter.js";
+import {
+  chatCompletion,
+  aceitaJsonSchemaEstrito,
+  resolverProvedor,
+  type ChatMessage,
+  type Provedor,
+} from "./openrouter.js";
 import { Bias, QuantClaim, Regime, type QuantClaim as QuantClaimT } from "../schemas/agents.js";
 import { TradeCardDraft, sealTradeCard, type TradeCard } from "../schemas/trade.js";
 import type { MarketSnapshot } from "../schemas/data.js";
@@ -19,6 +25,53 @@ export const PROMPT_VERSION = "strategist@2026-08-06-v3";
  * o crédito da conta não cobre a pré-autorização (402 de reserva).
  */
 export const STRATEGIST_MAX_TOKENS_PADRAO = 8000;
+
+/**
+ * Quantas vezes o strategist pode ser corrigido na mesma rodada antes de reprovar. Duas correções
+ * custam no máximo duas chamadas extras e cobrem o caso medido (uma incoerência residual depois de
+ * enunciar as regras). Sem limite, modelo teimoso vira laço pago.
+ */
+export const MAX_TENTATIVAS_CORRECAO = 2;
+
+export interface ProblemaValidacao {
+  /** Caminho do campo no JSON do modelo, ex. `trades.0.alvo_2`. */
+  caminho: string;
+  /** Mensagem do validador, ex. "alvo_2 precisa ser mais distante da entrada que alvo_1". */
+  mensagem: string;
+}
+
+/**
+ * Extrai os problemas só quando o erro é de validação. Devolve vazio para qualquer outra coisa
+ * (JSON quebrado, erro de rede), e vazio é o sinal para reprovar na hora em vez de pedir correção,
+ * porque não há o que o modelo conserte num erro que não é de conteúdo.
+ */
+export function problemasDeValidacao(err: unknown): ProblemaValidacao[] {
+  if (!(err instanceof z.ZodError)) return [];
+  return err.issues.map((i) => ({
+    caminho: i.path.map((p) => String(p)).join("."),
+    mensagem: i.message,
+  }));
+}
+
+/**
+ * Prompt de correção. Diz o que está errado, campo por campo, e manda devolver o JSON inteiro de
+ * novo. Repetir as regras aqui seria redundante com o system prompt e gastaria contexto, mas a
+ * linha final repete as duas que mais falham porque foi medido que elas são as que escapam.
+ */
+export function buildCorrecaoPrompt(problemas: readonly ProblemaValidacao[]): string {
+  const linhas = problemas.map((p) => `- ${p.caminho}: ${p.mensagem}`);
+  return [
+    "O JSON anterior foi REPROVADO pelo validador nestes pontos:",
+    ...linhas,
+    "",
+    "Corrija exatamente esses pontos e devolva o JSON COMPLETO de novo, com a mesma estrutura e os",
+    "mesmos instrumentos, mudando só o necessário para a validação passar. Lembre das invariantes:",
+    "direcao=\"comprar\" exige alvo_1 acima da entrada e invalidacao.nivel abaixo dela;",
+    "direcao=\"vender\" exige alvo_1 abaixo da entrada e invalidacao.nivel acima dela;",
+    "alvo_2 é sempre mais distante da entrada que alvo_1.",
+    "Responda APENAS o JSON, sem cerca de markdown e sem comentário.",
+  ].join("\n");
+}
 
 /**
  * Lê `STRATEGIST_MAX_TOKENS` do ambiente. Ausente, vazia ou não inteiro positivo = default
@@ -76,6 +129,22 @@ export function buildStrategistSystemPrompt(opts?: { incluirSchema?: boolean }):
     "Unit válida: BRL, USD, BRL_por_USD, pct, bps, index_points, ratio, contratos.",
     "trades pode ser [] se não houver assimetria. Se houver, 1-7 completos.",
     "cenarios tem exatamente 4 itens (base, bull, bear, cisne_cinza) e probabilidade_pct soma 100.",
+    "",
+    // Medido em 22/09/2026, primeira corrida na API da OpenAI: tres dos quatro trades foram
+    // reprovados por `alvo_1 contradiz a direção da operação` e um por `invalidação está do lado
+    // errado da entrada`. As regras existiam só no `.refine()` de `sealTradeCard` (src/schemas/
+    // trade.ts) e nunca foram ditas ao modelo. O prompt anterior funcionava porque o modelo da vez
+    // (google/gemini-3.6-flash) trazia a convenção de mercado como prior. Julgar por regra que o
+    // prompt não enuncia é loteria de fornecedor, e a loteria só aparece às 06h30.
+    "REGRAS DE COERÊNCIA. O validador reprova a rodada inteira se qualquer uma for violada:",
+    "1. direcao=\"comprar\": alvo_1 acima de entrada.nivel, alvo_2 acima de alvo_1,",
+    "   invalidacao.nivel abaixo de entrada.nivel (ou null).",
+    "2. direcao=\"vender\": alvo_1 abaixo de entrada.nivel, alvo_2 abaixo de alvo_1,",
+    "   invalidacao.nivel acima de entrada.nivel (ou null).",
+    "3. entrada.faixa.min <= entrada.nivel <= entrada.faixa.max.",
+    "4. alvo_1, alvo_2 e os dois limites da faixa usam a MESMA unidade de entrada.nivel.",
+    "5. retorno_potencial e perda_maxima são MAGNITUDES positivas e da mesma unidade;",
+    "   a direção da operação vem só de `direcao`, nunca do sinal desses dois.",
     "",
     "O esqueleto abaixo define A FORMA, nunca o conteúdo. Texto entre << e >> é instrução do que",
     "escrever naquele campo, não texto para copiar. Nenhum << ou >> pode sobrar na sua resposta.",
@@ -513,8 +582,10 @@ export interface RunStrategistInput {
   fetchFn?: typeof fetch;
   /** injeta resposta (testes offline) */
   mockContent?: string;
-  /** se true, usa api.deepseek.com em vez de OpenRouter */
+  /** @deprecated Apelido de `provedor: "deepseek"`. */
   deepseekApi?: boolean;
+  /** Provedor da chamada. Ausente = derivado de `deepseekApi`, que por sua vez cai em OpenRouter. */
+  provedor?: Provedor;
   /** contexto das etapas 1 e 2 (research + analyst). Ausente = rodada closed-book pura. */
   pesquisa?: PesquisaContexto;
   /** Esforço de raciocínio pedido ao provedor (`reasoning.effort` no OpenRouter). */
@@ -538,55 +609,97 @@ export interface RunStrategistResult {
 }
 
 export async function runStrategist(input: RunStrategistInput): Promise<RunStrategistResult> {
-  const content =
-    input.mockContent ??
-    (
-      await chatCompletion({
-        apiKey: input.apiKey,
-        model: input.model,
-        // A API da DeepSeek só garante `json_object`, sem schema estrito. Sem contrato de estrutura
-        // vindo do provedor, o modelo se apoiava no exemplo do prompt — que era justamente o que ele
-        // copiava. Mandar o schema no texto do system prompt devolve a referência de forma sem
-        // devolver a de conteúdo.
-        responseFormatJson: input.deepseekApi ? true : false,
-        responseFormatJsonSchema: input.deepseekApi ? undefined : {
-          name: "MorningCallStrategist",
-          schema: buildStrategistJsonSchema(),
-          strict: true,
-        },
-        maxTokens: input.maxTokens ?? STRATEGIST_MAX_TOKENS_PADRAO,
-        deepseekApi: input.deepseekApi,
-        ...(input.reasoningEffort ? { reasoning: { effort: input.reasoningEffort } } : {}),
-        messages: [
-          {
-            role: "system",
-            content: buildStrategistSystemPrompt({ incluirSchema: input.deepseekApi === true }),
-          },
-          {
-            role: "user",
-            content:
-              buildStrategistUserPrompt(input.snapshot) +
-              (input.pesquisa ? buildPesquisaBlock(input.pesquisa) : ""),
-          },
-        ],
-        fetchFn: input.fetchFn,
-      })
-    ).content;
-
-  const raw = parseStrategistContent(content);
+  const provedor = resolverProvedor(input);
+  // Structured Output estrito so no OpenRouter. Sem contrato de estrutura vindo do provedor, o
+  // modelo se apoiava no exemplo do prompt, que era justamente o que ele copiava. Mandar o schema
+  // no texto do system prompt devolve a referencia de forma sem devolver a de conteudo.
+  const estrito = aceitaJsonSchemaEstrito(provedor);
+  const messages: ChatMessage[] = [
+    {
+      role: "system",
+      content: buildStrategistSystemPrompt({ incluirSchema: !estrito }),
+    },
+    {
+      role: "user",
+      content:
+        buildStrategistUserPrompt(input.snapshot) +
+        (input.pesquisa ? buildPesquisaBlock(input.pesquisa) : ""),
+    },
+  ];
   const provenance: Provenance = {
     run_id: input.runId,
     model: input.model,
     prompt_version: PROMPT_VERSION,
     generated_at: new Date().toISOString(),
   };
-  const trades = sealStrategistTrades(raw, provenance);
-  return {
-    raw,
-    claims: raw.quant_claims,
-    trades,
-    provenance,
-    model: input.model,
-    echo: detectPromptEcho(raw),
-  };
+
+  const chamarModelo = async (): Promise<string> =>
+    (
+      await chatCompletion({
+        apiKey: input.apiKey,
+        model: input.model,
+        responseFormatJson: !estrito,
+        responseFormatJsonSchema: estrito
+          ? {
+              name: "MorningCallStrategist",
+              schema: buildStrategistJsonSchema(),
+              strict: true,
+            }
+          : undefined,
+        maxTokens: input.maxTokens ?? STRATEGIST_MAX_TOKENS_PADRAO,
+        provedor,
+        ...(input.reasoningEffort ? { reasoning: { effort: input.reasoningEffort } } : {}),
+        messages,
+        fetchFn: input.fetchFn,
+      })
+    ).content;
+
+  let content = input.mockContent ?? (await chamarModelo());
+
+  /**
+   * Correção guiada pelo validador. Medido em 22/09/2026, na primeira corrida contra a API da
+   * OpenAI: o modelo devolveu níveis internamente incoerentes (`alvo_2` mais perto que `alvo_1`,
+   * `invalidacao` do lado errado) e o Zod reprovou. Enunciar as regras no prompt resolveu parte,
+   * não tudo, e insistir só no texto do prompt é aposta na obediência do fornecedor da vez.
+   *
+   * O validador já produz a lista exata do que está errado, com caminho e motivo. Devolver essa
+   * lista ao modelo é mais barato e mais confiável que reescrever o prompt: uma chamada a mais
+   * custa centavos, uma rodada reprovada custa o dia sem Morning Call. O laço é limitado, e o erro
+   * da última tentativa é o que sobe, para não mascarar a causa.
+   */
+  for (let tentativa = 1; ; tentativa += 1) {
+    try {
+      const raw = parseStrategistContent(content);
+      const trades = sealStrategistTrades(raw, provenance);
+      return {
+        raw,
+        claims: raw.quant_claims,
+        trades,
+        provenance,
+        model: input.model,
+        echo: detectPromptEcho(raw),
+      };
+    } catch (err) {
+      // Só erro de validação tem o que corrigir. Falha de rede ou de JSON bruto sobe na hora.
+      const problemas = problemasDeValidacao(err);
+      if (problemas.length === 0 || tentativa > MAX_TENTATIVAS_CORRECAO || input.mockContent) {
+        throw err;
+      }
+      // Evento estruturado de execução normal, não debug: é o rastro de quantas correções a rodada
+      // custou. Mesma decisão de `openrouter_billing_retry`.
+      // eslint-disable-next-line no-console
+      console.log(
+        JSON.stringify({
+          event: "strategist_correcao",
+          runId: input.runId,
+          tentativa,
+          problemas: problemas.length,
+          model: input.model,
+        }),
+      );
+      messages.push({ role: "assistant", content });
+      messages.push({ role: "user", content: buildCorrecaoPrompt(problemas) });
+      content = await chamarModelo();
+    }
+  }
 }

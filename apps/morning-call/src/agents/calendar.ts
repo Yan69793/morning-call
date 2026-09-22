@@ -8,7 +8,7 @@
  * os eventos fornecidos. A precisao factual (data, hora, consenso) vem do scraper.
  */
 import { z } from "zod";
-import { chatCompletion } from "./openrouter.js";
+import { chatCompletion, aceitaJsonSchemaEstrito, resolverProvedor, type Provedor } from "./openrouter.js";
 import {
   CalendarAgentRaw,
   type RawAgendaInput,
@@ -322,7 +322,10 @@ export interface RunCalendarInput {
   runId: string;
   fetchFn?: typeof fetch;
   mockContent?: string;
+  /** @deprecated Apelido de `provedor: "deepseek"`. */
   deepseekApi?: boolean;
+  /** Provedor da chamada. Ausente = derivado de `deepseekApi`, que por sua vez cai em OpenRouter. */
+  provedor?: Provedor;
 }
 
 export interface RunCalendarResult {
@@ -336,28 +339,30 @@ export interface RunCalendarResult {
 export async function runCalendarAgent(
   input: RunCalendarInput,
 ): Promise<RunCalendarResult> {
+  const provedor = resolverProvedor(input);
   const content =
     input.mockContent ??
     (
       await chatCompletion({
         apiKey: input.apiKey,
         model: input.model,
-        // A API da DeepSeek so garante `json_object`, sem schema estrito. Mandar o schema no
-        // texto do system prompt devolve a referencia de forma sem depender so do esqueleto.
-        responseFormatJson: input.deepseekApi ? true : false,
-        responseFormatJsonSchema: input.deepseekApi
-          ? undefined
-          : {
+        // Structured Output estrito so no OpenRouter. DeepSeek e OpenAI recebem `json_object`
+        // simples e se apoiam no schema que vai no texto do system prompt, pelo mesmo motivo:
+        // o `buildCalendarJsonSchema` nao satisfaz a exigencia de schema estrito.
+        responseFormatJson: !aceitaJsonSchemaEstrito(provedor),
+        responseFormatJsonSchema: aceitaJsonSchemaEstrito(provedor)
+          ? {
               name: "EconomicCalendar",
               schema: buildCalendarJsonSchema(),
               strict: true,
-            },
+            }
+          : undefined,
         maxTokens: 8000,
-        deepseekApi: input.deepseekApi,
+        provedor,
         messages: [
           {
             role: "system",
-            content: buildCalendarSystemPrompt({ incluirSchema: input.deepseekApi === true }),
+            content: buildCalendarSystemPrompt({ incluirSchema: !aceitaJsonSchemaEstrito(provedor) }),
           },
           {
             role: "user",

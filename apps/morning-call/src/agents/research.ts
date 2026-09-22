@@ -8,7 +8,7 @@
  * A proveniência (`message.annotations`) atravessa toda a cadeia: cada fonte carrega url, título,
  * domínio e a janela temporal classificada. Sem isso, o estrategista recebe texto sem rastro.
  */
-import { chatCompletion, type CitationProvenance } from "./openrouter.js";
+import { chatCompletion, resolverProvedor, type CitationProvenance, type Provedor } from "./openrouter.js";
 
 /** Consulta única da cadeia. Editar aqui muda research e analyst juntos, por construção. */
 export const RESEARCH_QUERY =
@@ -160,6 +160,13 @@ export interface RunResearchInput {
   reasoningEffort?: string | null;
   timeoutMs?: number;
   fetchFn?: typeof fetch;
+  /** Provedor da chamada. Ausente = OpenRouter, que e o unico com o plugin `web` de busca. */
+  provedor?: Provedor;
+  /**
+   * @deprecated Apelido de `provedor: "deepseek"`. O caminho DeepSeek nao tem busca, entao usar
+   * isto aqui e declarar que a pesquisa vai voltar vazia.
+   */
+  deepseekApi?: boolean;
 }
 
 export async function runResearch(input: RunResearchInput): Promise<ResearchResult> {
@@ -168,6 +175,7 @@ export async function runResearch(input: RunResearchInput): Promise<ResearchResu
   const r = await chatCompletion({
     apiKey: input.apiKey,
     model: input.model,
+    provedor: resolverProvedor(input),
     messages: [{ role: "user", content: query }],
     plugins: [{ id: "web", max_results: maxResults }],
     // O resumo é material para o analyst, não produto final: com o raciocínio desligado o teto

@@ -111,6 +111,49 @@ export interface ChatMessage {
   content: string;
 }
 
+/**
+ * Provedor por tras do mesmo contrato de chat completion. Os tres falam o dialeto OpenAI
+ * (`choices[].message.content`), entao o que muda entre eles e a URL, os cabecalhos e duas
+ * capacidades: plugin de busca web (so o OpenRouter) e Structured Output estrito.
+ *
+ * `openai` entrou em 22/09/2026. O Worker morria desde 08/09 porque a cota da chave do OpenRouter
+ * acaba antes do fim da semana, e a chave do OpenRouter e a mesma que o pipeline do
+ * briefing-interno consome todo dia as 07h00.
+ */
+export type Provedor = "openrouter" | "deepseek" | "openai";
+
+const URL_POR_PROVEDOR: Record<Provedor, string> = {
+  openrouter: "https://openrouter.ai/api/v1/chat/completions",
+  deepseek: "https://api.deepseek.com/v1/chat/completions",
+  openai: "https://api.openai.com/v1/chat/completions",
+};
+
+/** Rotulo do provedor nas mensagens de erro. Sem ele, um 401 da OpenAI apareceria como OpenRouter. */
+const ROTULO_POR_PROVEDOR: Record<Provedor, string> = {
+  openrouter: "OpenRouter",
+  deepseek: "DeepSeek",
+  openai: "OpenAI",
+};
+
+/**
+ * Resolve o provedor a partir dos campos aceitos. `deepseekApi` sobrevive como apelido do que ja
+ * existia antes do tipo `Provedor`; sem isto, todo chamador antigo teria de mudar junto.
+ */
+export function resolverProvedor(opts: { provedor?: Provedor; deepseekApi?: boolean }): Provedor {
+  if (opts.provedor !== undefined) return opts.provedor;
+  return opts.deepseekApi === true ? "deepseek" : "openrouter";
+}
+
+/**
+ * `response_format` no formato estrito (`json_schema`) exige um schema que satisfaca a regra do
+ * provedor, com `additionalProperties: false` em todo objeto e todo campo em `required`. O
+ * `buildStrategistJsonSchema` nao e assim, e e assim de proposito (ver o comentario dele). OpenAI e
+ * DeepSeek, portanto, recebem `json_object` simples e o schema vai no texto do system prompt.
+ */
+export function aceitaJsonSchemaEstrito(provedor: Provedor): boolean {
+  return provedor === "openrouter";
+}
+
 export interface OpenRouterOptions {
   apiKey: string;
   model: string;
@@ -122,7 +165,9 @@ export interface OpenRouterOptions {
   timeoutMs?: number;
   fetchFn?: typeof fetch;
   maxTokens?: number;
-  /** Se true, usa api.deepseek.com em vez de OpenRouter (requer DEEPSEEK_API_KEY) */
+  /** Provedor da chamada. Ausente = `openrouter`. */
+  provedor?: Provedor;
+  /** @deprecated Apelido de `provedor: "deepseek"`. Mantido para nao quebrar chamador antigo. */
   deepseekApi?: boolean;
   /**
    * Plugins do OpenRouter. A pesquisa web entra aqui:
@@ -211,16 +256,21 @@ export async function chatCompletion(opts: OpenRouterOptions): Promise<OpenRoute
   const timeoutMs = opts.timeoutMs ?? 120_000;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
-  const isDeepSeek = opts.deepseekApi === true;
-  const apiUrl = isDeepSeek
-    ? "https://api.deepseek.com/v1/chat/completions"
-    : "https://openrouter.ai/api/v1/chat/completions";
+  const provedor = resolverProvedor(opts);
+  const apiUrl = URL_POR_PROVEDOR[provedor];
+  const prefix = ROTULO_POR_PROVEDOR[provedor];
   try {
     const montarBody = (maxTokens: number): Record<string, unknown> => {
+      // Nome do teto de tokens muda por provedor, e isso foi medido, nao suposto. Sonda de
+      // 22/09/2026 contra api.openai.com, doze modelos, quatro testes cada: a familia gpt-5.x e
+      // gpt-6 recusa `max_tokens` com "Unsupported parameter ... Use 'max_completion_tokens'
+      // instead", e aceita `max_completion_tokens`. O `gpt-4.1-mini`, mais antigo, aceita os dois.
+      // Ou seja, `max_completion_tokens` e o unico nome que serve para a OpenAI inteira, e
+      // `max_tokens` e o nome que OpenRouter e DeepSeek conhecem.
       const body: Record<string, unknown> = {
         model: opts.model,
         messages: opts.messages,
-        max_tokens: maxTokens,
+        [provedor === "openai" ? "max_completion_tokens" : "max_tokens"]: maxTokens,
       };
       if (opts.responseFormatJsonSchema) {
         body.response_format = {
@@ -234,10 +284,16 @@ export async function chatCompletion(opts: OpenRouterOptions): Promise<OpenRoute
       } else if (opts.responseFormatJson) {
         body.response_format = { type: "json_object" };
       }
-      if (opts.plugins && opts.plugins.length > 0) {
+      // `plugins` e campo do corpo do OpenRouter. Mandar para OpenAI ou DeepSeek nao e inofensivo,
+      // e parametro desconhecido e vira 400.
+      if (opts.plugins && opts.plugins.length > 0 && provedor === "openrouter") {
         body.plugins = opts.plugins;
       }
-      if (opts.reasoning) {
+      // `reasoning` e campo do corpo do OpenRouter. A OpenAI usa outro nome, `reasoning_effort`, e
+      // com valores diferentes (`none` nao existe la). Mandar o campo errado nao e inofensivo,
+      // parametro desconhecido vira 400, entao o controle de raciocinio simplesmente nao vai para
+      // a OpenAI. Custo maior e melhor que corrida reprovada por campo invalido.
+      if (opts.reasoning && provedor === "openrouter") {
         body.reasoning = opts.reasoning;
       }
       return body;
@@ -246,7 +302,9 @@ export async function chatCompletion(opts: OpenRouterOptions): Promise<OpenRoute
       Authorization: `Bearer ${opts.apiKey}`,
       "Content-Type": "application/json",
     };
-    if (!isDeepSeek) {
+    // Cabecalho de atribuicao do OpenRouter. Nao vai para os outros provedores: eles nao usam e
+    // nao ha por que anunciar o produto de terceiro na requisicao alheia.
+    if (provedor === "openrouter") {
       headers["HTTP-Referer"] = "https://vixradar.com";
       headers["X-Title"] = "morning-call";
     }
@@ -261,10 +319,11 @@ export async function chatCompletion(opts: OpenRouterOptions): Promise<OpenRoute
     let res = await enviar(opts.maxTokens ?? 4096);
     if (!res.ok) {
       const text = await res.text().catch(() => "");
-      const prefix = isDeepSeek ? "DeepSeek" : "OpenRouter";
-      // 402 de reserva de crédito é tratado só no caminho OpenRouter: api.deepseek.com não
-      // tem a pré-autorização de max_tokens e nunca informa o N.
-      if (!isDeepSeek && res.status === 402) {
+      // 402 de reserva de credito e tratado so no caminho OpenRouter: nem api.deepseek.com nem
+      // api.openai.com tem a pre-autorizacao de max_tokens, entao nenhum dos dois informa o N.
+      // A cota da OpenAI se esgota em 429 `insufficient_quota`, que e outro contrato e cai no erro
+      // comum abaixo, sem retry inventado.
+      if (provedor === "openrouter" && res.status === 402) {
         const afford = extrairAffordDoCorpo(text);
         const mensagem = `${prefix} HTTP ${res.status}: ${text.slice(0, 200)}`;
         const reduzido = afford === undefined ? undefined : afford - MARGEM_TOKENS_402;
